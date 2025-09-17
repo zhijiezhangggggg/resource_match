@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 后台管理系统启动类
  * 
  * @author admin
- * @date 2024
+ * @date 2025
  */
 @SpringBootApplication
 @MapperScan("com.admin.mapper")

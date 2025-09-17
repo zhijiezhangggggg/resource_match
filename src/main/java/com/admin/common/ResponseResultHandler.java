@@ -1,5 +1,6 @@
 package com.admin.common;
 
+import com.disaster.emergency.common.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
@@ -32,7 +33,7 @@ public class ResponseResultHandler implements ResponseBodyAdvice<Object> {
         
         // 如果body为null，返回成功结果
         if (body == null) {
-            return Result.success();
+            return Result.success("操作成功", null);
         }
         
         // 如果body已经是Result类型，直接返回

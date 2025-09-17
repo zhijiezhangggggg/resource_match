@@ -1,6 +1,6 @@
 package com.admin.controller;
 
-import com.admin.common.Result;
+import com.disaster.emergency.common.Result;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
