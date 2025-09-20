@@ -3,7 +3,6 @@ package com.disaster.emergency.controller;
 import com.disaster.emergency.common.Result;
 import com.disaster.emergency.entity.User;
 import com.disaster.emergency.service.UserService;
-import com.disaster.emergency.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -21,8 +20,6 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    @Autowired
-    private JwtUtil jwtUtil;
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody Map<String, String> loginRequest) {
@@ -41,10 +38,7 @@ public class UserController {
             return Result.error(10001, "用户名或密码错误");
         }
 
-        String token = jwtUtil.generateToken(username);
-        
         Map<String, Object> data = new HashMap<>();
-        data.put("token", token);
         data.put("user", user);
         
         return Result.success("登录成功", data);
@@ -81,16 +75,15 @@ public class UserController {
     }
 
     @GetMapping("/info")
-    public Result<User> getUserInfo(@RequestHeader("Authorization") String token) {
+    public Result<User> getUserInfo(@RequestParam String username) {
         try {
-            String username = jwtUtil.getUsernameFromToken(token.replace("Bearer ", ""));
             User user = userService.getUserByUsername(username);
             if (user == null) {
                 return Result.error(10002, "用户不存在");
             }
             return Result.success("获取成功", user);
         } catch (Exception e) {
-            return Result.error(401, "未授权");
+            return Result.error(10002, "获取用户信息失败");
         }
     }
 

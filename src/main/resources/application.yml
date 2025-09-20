@@ -60,10 +60,6 @@ mybatis-plus:
       logic-not-delete-value: 0
   mapper-locations: classpath*:mapper/*.xml
 
-# JWT配置
-jwt:
-  secret: disaster-emergency-platform-secret-key-2024-very-long-and-secure-key-for-hs512-algorithm-requirement
-  expiration: 86400000 # 24小时
 
 # 日志配置
 logging:
