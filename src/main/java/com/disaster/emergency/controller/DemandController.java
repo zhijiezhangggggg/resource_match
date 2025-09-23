@@ -1,24 +1,32 @@
 package com.disaster.emergency.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.disaster.emergency.common.Result;
 import com.disaster.emergency.entity.Demand;
 import com.disaster.emergency.service.DemandService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/demand")
 @CrossOrigin
+@Tag(name = "需求管理接口", description = "需求管理相关接口")
 public class DemandController {
 
     @Autowired
     private DemandService demandService;
 
     @PostMapping("/submit")
-    public Result<Demand> submitDemand(@RequestBody Demand demand) {
+    @Operation(summary = "提交需求", description = "提交新的救援需求")
+    public Result<Demand> submitDemand(@Parameter(description = "需求信息", required = true) @RequestBody Demand demand) {
         try {
             // 参数验证
             if (demand.getDisasterId() == null || demand.getDisasterId() <= 0) {
@@ -54,40 +62,167 @@ public class DemandController {
     }
 
     @GetMapping("/list")
+    @Operation(summary = "查询需求列表", description = "分页查询需求列表，支持多条件筛选")
     public Result<Map<String, Object>> getDemandList(
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size,
-            @RequestParam(required = false) Long disasterId,
-            @RequestParam(required = false) String demandType,
-            @RequestParam(required = false) String urgency,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String province,
-            @RequestParam(required = false) String city) {
+            @Parameter(description = "页码", example = "1") @RequestParam(defaultValue = "1") Integer page,
+            @Parameter(description = "每页大小", example = "10") @RequestParam(defaultValue = "10") Integer size,
+            @Parameter(description = "灾情ID") @RequestParam(required = false) Long disasterId,
+            @Parameter(description = "需求类型") @RequestParam(required = false) String demandType,
+            @Parameter(description = "紧急程度") @RequestParam(required = false) String urgency,
+            @Parameter(description = "状态") @RequestParam(required = false) String status,
+            @Parameter(description = "省份") @RequestParam(required = false) String province,
+            @Parameter(description = "城市") @RequestParam(required = false) String city) {
         
         // 参数验证
         if (page < 1) page = 1;
         if (size < 1 || size > 100) size = 10;
         
-        Map<String, Object> result = new HashMap<>();
-        result.put("total", 30);
-        result.put("pages", 3);
-        result.put("current", page);
-        result.put("size", size);
-        result.put("records", demandService.list());
-        
-        return Result.success("查询成功", result);
+        try {
+            Page<Demand> demandPage = demandService.getDemandList(page, size, disasterId, demandType, urgency, status, province, city);
+            Map<String, Object> result = new HashMap<>();
+            result.put("total", demandPage.getTotal());
+            result.put("pages", demandPage.getPages());
+            result.put("current", demandPage.getCurrent());
+            result.put("size", demandPage.getSize());
+            result.put("records", demandPage.getRecords());
+            
+            return Result.success("查询成功", result);
+        } catch (Exception e) {
+            return Result.error(30001, "查询失败: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{id}")
-    public Result<Demand> getDemandDetail(@PathVariable Long id) {
+    @Operation(summary = "查询需求详情", description = "根据ID查询需求详细信息")
+    public Result<Demand> getDemandDetail(@Parameter(description = "需求ID", required = true) @PathVariable Long id) {
         if (id == null || id <= 0) {
             return Result.error(30002, "需求ID无效");
         }
         
-        Demand demand = demandService.getById(id);
-        if (demand == null) {
-            return Result.error(30002, "需求ID不存在");
+        try {
+            Demand demand = demandService.getById(id);
+            if (demand == null) {
+                return Result.error(30002, "需求不存在");
+            }
+            return Result.success("查询成功", demand);
+        } catch (Exception e) {
+            return Result.error(30001, "查询失败: " + e.getMessage());
         }
-        return Result.success("查询成功", demand);
+    }
+
+    @PutMapping("/update")
+    @Operation(summary = "更新需求", description = "更新需求信息")
+    public Result<Demand> updateDemand(@Parameter(description = "需求信息", required = true) @RequestBody Demand demand) {
+        try {
+            if (demand.getId() == null || demand.getId() <= 0) {
+                return Result.error(30002, "需求ID不能为空或无效");
+            }
+            
+            // 检查需求是否存在
+            Demand existingDemand = demandService.getById(demand.getId());
+            if (existingDemand == null) {
+                return Result.error(30002, "需求不存在");
+            }
+            
+            demand.setUpdateTime(LocalDateTime.now());
+            boolean success = demandService.updateById(demand);
+            if (success) {
+                return Result.success("更新成功", demand);
+            } else {
+                return Result.error(30001, "更新失败");
+            }
+        } catch (Exception e) {
+            return Result.error(30001, "更新失败: " + e.getMessage());
+        }
+    }
+
+    @PutMapping("/status")
+    @Operation(summary = "更新需求状态", description = "更新需求处理状态")
+    public Result<String> updateDemandStatus(
+            @Parameter(description = "需求ID", required = true) @RequestParam Long id,
+            @Parameter(description = "新状态", required = true) @RequestParam String status) {
+        try {
+            if (id == null || id <= 0) {
+                return Result.error(30002, "需求ID不能为空或无效");
+            }
+            if (status == null || status.trim().isEmpty()) {
+                return Result.error(30001, "状态不能为空");
+            }
+            
+            boolean success = demandService.updateDemandStatus(id, status);
+            if (success) {
+                return Result.success("状态更新成功", null);
+            } else {
+                return Result.error(30001, "状态更新失败");
+            }
+        } catch (Exception e) {
+            return Result.error(30001, "状态更新失败: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "删除需求", description = "根据ID删除需求")
+    public Result<String> deleteDemand(@Parameter(description = "需求ID", required = true) @PathVariable Long id) {
+        try {
+            if (id == null || id <= 0) {
+                return Result.error(30002, "需求ID不能为空或无效");
+            }
+            
+            // 检查需求是否存在
+            Demand demand = demandService.getById(id);
+            if (demand == null) {
+                return Result.error(30002, "需求不存在");
+            }
+            
+            boolean success = demandService.removeById(id);
+            if (success) {
+                return Result.success("删除成功", null);
+            } else {
+                return Result.error(30001, "删除失败");
+            }
+        } catch (Exception e) {
+            return Result.error(30001, "删除失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/statistics")
+    @Operation(summary = "需求统计", description = "获取需求统计信息")
+    public Result<Map<String, Object>> getDemandStatistics(
+            @Parameter(description = "开始时间") @RequestParam(required = false) String startTime,
+            @Parameter(description = "结束时间") @RequestParam(required = false) String endTime,
+            @Parameter(description = "省份") @RequestParam(required = false) String province,
+            @Parameter(description = "城市") @RequestParam(required = false) String city) {
+        try {
+            Map<String, Object> statistics = demandService.getDemandStatistics(startTime, endTime, province, city);
+            return Result.success("统计查询成功", statistics);
+        } catch (Exception e) {
+            return Result.error(30001, "统计查询失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/statistics/by-type")
+    @Operation(summary = "按类型统计需求", description = "按需求类型统计需求数量")
+    public Result<List<Map<String, Object>>> getDemandStatisticsByType(
+            @Parameter(description = "开始时间") @RequestParam(required = false) String startTime,
+            @Parameter(description = "结束时间") @RequestParam(required = false) String endTime) {
+        try {
+            List<Map<String, Object>> statistics = demandService.getDemandStatisticsByType(startTime, endTime);
+            return Result.success("统计查询成功", statistics);
+        } catch (Exception e) {
+            return Result.error(30001, "统计查询失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/statistics/by-urgency")
+    @Operation(summary = "按紧急程度统计需求", description = "按紧急程度统计需求数量")
+    public Result<List<Map<String, Object>>> getDemandStatisticsByUrgency(
+            @Parameter(description = "开始时间") @RequestParam(required = false) String startTime,
+            @Parameter(description = "结束时间") @RequestParam(required = false) String endTime) {
+        try {
+            List<Map<String, Object>> statistics = demandService.getDemandStatisticsByUrgency(startTime, endTime);
+            return Result.success("统计查询成功", statistics);
+        } catch (Exception e) {
+            return Result.error(30001, "统计查询失败: " + e.getMessage());
+        }
     }
 }
