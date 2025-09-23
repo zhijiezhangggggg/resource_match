@@ -41,7 +41,7 @@ public class TextParseServiceImpl implements TextParseService {
         record.setParsedResult(mapToJson(result));
         record.setParseStatus(result.isEmpty() ? "failed" : "success");
         record.setConfidenceScore(calculateConfidence(result));
-        record.setParseAlgorithm("keyword+regex");
+        // record.setParseAlgorithm("keyword+regex"); // 暂时注释掉
         record.setBusinessType(businessType);
         record.setCreateTime(LocalDateTime.now());
         
@@ -143,17 +143,32 @@ public class TextParseServiceImpl implements TextParseService {
     }
     
     private String mapToJson(Map<String, Object> map) {
-        // 简单的JSON转换，实际项目中可以使用Jackson或FastJSON
-        StringBuilder json = new StringBuilder("{");
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            json.append("\"").append(entry.getKey()).append("\":\"")
-                .append(entry.getValue()).append("\",");
+        if (map == null || map.isEmpty()) {
+            return "{}";
         }
-        if (json.length() > 1) {
-            json.setLength(json.length() - 1);
+        
+        // 简单的JSON转换，处理特殊字符
+        StringBuilder json = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (!first) {
+                json.append(",");
+            }
+            json.append("\"").append(escapeJson(entry.getKey())).append("\":\"")
+                .append(escapeJson(String.valueOf(entry.getValue()))).append("\"");
+            first = false;
         }
         json.append("}");
         return json.toString();
+    }
+    
+    private String escapeJson(String str) {
+        if (str == null) return "";
+        return str.replace("\\", "\\\\")
+                 .replace("\"", "\\\"")
+                 .replace("\n", "\\n")
+                 .replace("\r", "\\r")
+                 .replace("\t", "\\t");
     }
     
     private BigDecimal calculateConfidence(Map<String, Object> result) {

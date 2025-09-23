@@ -3,6 +3,10 @@ package com.disaster.emergency.controller;
 import com.disaster.emergency.common.Result;
 import com.disaster.emergency.entity.Resource;
 import com.disaster.emergency.service.ResourceService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,11 +16,17 @@ import java.util.Map;
 @RestController
 @RequestMapping("/resource")
 @CrossOrigin
+@Tag(name = "资源管理", description = "资源信息管理、查询、更新")
 public class ResourceController {
 
     @Autowired
     private ResourceService resourceService;
 
+    @Operation(summary = "保存资源", description = "新增或更新资源信息")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "资源保存成功"),
+            @ApiResponse(responseCode = "40001", description = "参数错误")
+    })
     @PostMapping("/save")
     public Result<Resource> saveResource(@RequestBody Resource resource) {
         try {

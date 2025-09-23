@@ -17,7 +17,6 @@ public class TextParseRecord {
     private String parsedResult;
     private String parseStatus;
     private BigDecimal confidenceScore;
-    private String parseAlgorithm;
     private String businessType;
     private Long businessId;
     private LocalDateTime createTime;

@@ -23,7 +23,8 @@ public class Disaster {
     private String parsedData;
     private String reporterName;
     private String reporterPhone;
-    private Long reporterId;
+    // 暂时注释掉不存在的字段
+    // private Long reporterId;
     private String status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
