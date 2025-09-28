@@ -124,4 +124,12 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
     public List<Map<String, Object>> getResourceStatisticsByStatus() {
         return baseMapper.getResourceStatisticsByStatus();
     }
+    
+    @Override
+    public List<Resource> getAvailableResources() {
+        QueryWrapper<Resource> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", "available")
+                   .gt("available_quantity", 0);
+        return list(queryWrapper);
+    }
 }

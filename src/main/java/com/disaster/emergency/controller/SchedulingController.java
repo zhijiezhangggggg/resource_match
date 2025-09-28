@@ -54,7 +54,12 @@ public class SchedulingController {
                 return Result.error(60001, "调度员姓名不能为空");
             }
             
-            SchedulingRecord record = schedulingService.createScheduling(demandId, resourceId, allocatedQuantity, schedulerId, schedulerName, remark);
+            Long recordId = schedulingService.createScheduling(demandId, resourceId, allocatedQuantity, schedulerId, schedulerName, remark);
+            if (recordId == null) {
+                return Result.error(60001, "调度记录创建失败");
+            }
+            
+            SchedulingRecord record = schedulingService.getSchedulingRecord(recordId);
             
             Map<String, Object> result = new HashMap<>();
             result.put("id", record.getId());
@@ -99,7 +104,6 @@ public class SchedulingController {
         }
         
         String status = request.get("status");
-        String remark = request.get("remark");
         
         if (status == null || status.trim().isEmpty()) {
             return Result.error(60001, "状态不能为空");

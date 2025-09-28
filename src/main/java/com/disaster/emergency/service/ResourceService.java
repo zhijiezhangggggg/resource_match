@@ -43,4 +43,9 @@ public interface ResourceService extends IService<Resource> {
      * 按状态统计资源
      */
     List<Map<String, Object>> getResourceStatisticsByStatus();
+    
+    /**
+     * 获取可用资源列表
+     */
+    List<Resource> getAvailableResources();
 }
