@@ -104,4 +104,24 @@ public interface KnowledgeGraphService {
      * @return 统计信息
      */
     Map<String, Object> getGraphStatistics();
+    
+    /**
+     * 获取前端知识图谱数据
+     * @return 包含节点和关系的图谱数据
+     */
+    Map<String, Object> getFrontendKnowledgeGraphData();
+    
+    /**
+     * 根据节点类型获取节点列表
+     * @param nodeType 节点类型（resource、demand、disaster）
+     * @return 节点列表
+     */
+    List<Map<String, Object>> getNodesByType(String nodeType);
+    
+    /**
+     * 获取节点关联关系
+     * @param nodeId 节点ID
+     * @return 节点关联关系
+     */
+    Map<String, Object> getNodeConnections(Long nodeId);
 }

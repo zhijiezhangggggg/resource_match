@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -332,6 +333,69 @@ public class ResourceController {
             return Result.success("统计成功", statistics);
         } catch (Exception e) {
             return Result.error(40001, "统计失败: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "资源分配", description = "分配资源给指定需求，更新资源可用数量并建立知识图谱关联")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "资源分配成功"),
+            @ApiResponse(responseCode = "40001", description = "参数错误"),
+            @ApiResponse(responseCode = "40002", description = "资源不存在"),
+            @ApiResponse(responseCode = "40003", description = "需求不存在"),
+            @ApiResponse(responseCode = "40004", description = "可用数量不足")
+    })
+    @PostMapping("/{resourceId}/allocate")
+    public Result<Map<String, Object>> allocateResource(
+            @PathVariable Long resourceId,
+            @RequestBody Map<String, Object> allocationRequest) {
+        
+        try {
+            // 参数验证
+            if (resourceId == null || resourceId <= 0) {
+                return Result.error(40002, "资源ID无效");
+            }
+            
+            Integer allocatedQuantity = (Integer) allocationRequest.get("allocatedQuantity");
+            Long demandId = Long.valueOf(allocationRequest.get("demandId").toString());
+            String allocationReason = (String) allocationRequest.get("allocationReason");
+            String estimatedArrivalTimeStr = (String) allocationRequest.get("estimatedArrivalTime");
+            String allocator = (String) allocationRequest.get("allocator");
+            String remarks = (String) allocationRequest.get("remarks");
+            
+            if (allocatedQuantity == null || allocatedQuantity <= 0) {
+                return Result.error(40001, "分配数量必须大于0");
+            }
+            if (demandId == null || demandId <= 0) {
+                return Result.error(40001, "需求ID无效");
+            }
+            if (allocationReason == null || allocationReason.trim().isEmpty()) {
+                return Result.error(40001, "分配原因不能为空");
+            }
+            if (allocationReason.length() > 200) {
+                return Result.error(40001, "分配原因不能超过200个字符");
+            }
+            if (estimatedArrivalTimeStr == null || estimatedArrivalTimeStr.trim().isEmpty()) {
+                return Result.error(40001, "预计到达时间不能为空");
+            }
+            
+            // 解析预计到达时间
+            LocalDateTime estimatedArrivalTime;
+            try {
+                estimatedArrivalTime = LocalDateTime.parse(estimatedArrivalTimeStr, 
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } catch (Exception e) {
+                return Result.error(40001, "预计到达时间格式不正确，应为：yyyy-MM-dd HH:mm:ss");
+            }
+            
+            // 执行资源分配
+            Map<String, Object> result = resourceService.allocateResource(
+                resourceId, demandId, allocatedQuantity, allocationReason, 
+                estimatedArrivalTime, allocator, remarks);
+            
+            return Result.success("资源分配成功", result);
+            
+        } catch (Exception e) {
+            return Result.error(40001, "资源分配失败: " + e.getMessage());
         }
     }
 }

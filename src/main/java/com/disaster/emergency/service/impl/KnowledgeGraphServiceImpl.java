@@ -2,8 +2,14 @@ package com.disaster.emergency.service.impl;
 
 import com.disaster.emergency.entity.KnowledgeNode;
 import com.disaster.emergency.entity.KnowledgeRelation;
+import com.disaster.emergency.entity.Resource;
+import com.disaster.emergency.entity.Demand;
+import com.disaster.emergency.entity.Disaster;
 import com.disaster.emergency.mapper.KnowledgeNodeMapper;
 import com.disaster.emergency.mapper.KnowledgeRelationMapper;
+import com.disaster.emergency.mapper.ResourceMapper;
+import com.disaster.emergency.mapper.DemandMapper;
+import com.disaster.emergency.mapper.DisasterMapper;
 import com.disaster.emergency.service.KnowledgeGraphService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,6 +27,15 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     
     @Autowired
     private KnowledgeRelationMapper knowledgeRelationMapper;
+    
+    @Autowired
+    private ResourceMapper resourceMapper;
+    
+    @Autowired
+    private DemandMapper demandMapper;
+    
+    @Autowired
+    private DisasterMapper disasterMapper;
     
     @Override
     public Long createNode(String nodeType, Long businessId, String nodeName, Map<String, Object> properties) {
@@ -249,6 +264,151 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
         stats.put("relationTypeStats", relationTypeStats);
         
         return stats;
+    }
+    
+    @Override
+    public Map<String, Object> getFrontendKnowledgeGraphData() {
+        Map<String, Object> result = new HashMap<>();
+        
+        // 获取所有节点
+        List<Map<String, Object>> nodes = new ArrayList<>();
+        
+        // 获取资源节点
+        List<Resource> resources = resourceMapper.selectList(null);
+        for (Resource resource : resources) {
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", "resource_" + resource.getId());
+            node.put("type", "resource");
+            node.put("name", resource.getResourceName());
+            node.put("label", resource.getResourceType());
+            node.put("data", resource);
+            nodes.add(node);
+        }
+        
+        // 获取需求节点
+        List<Demand> demands = demandMapper.selectList(null);
+        for (Demand demand : demands) {
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", "demand_" + demand.getId());
+            node.put("type", "demand");
+            node.put("name", demand.getDemandType());
+            node.put("label", "需求");
+            node.put("data", demand);
+            nodes.add(node);
+        }
+        
+        // 获取灾情节点
+        List<Disaster> disasters = disasterMapper.selectList(null);
+        for (Disaster disaster : disasters) {
+            Map<String, Object> node = new HashMap<>();
+            node.put("id", "disaster_" + disaster.getId());
+            node.put("type", "disaster");
+            node.put("name", disaster.getDisasterType());
+            node.put("label", "灾情");
+            node.put("data", disaster);
+            nodes.add(node);
+        }
+        
+        // 获取所有关系
+        List<Map<String, Object>> edges = new ArrayList<>();
+        List<KnowledgeRelation> relations = knowledgeRelationMapper.selectList(null);
+        for (KnowledgeRelation relation : relations) {
+            Map<String, Object> edge = new HashMap<>();
+            edge.put("id", "relation_" + relation.getId());
+            edge.put("source", relation.getSourceNodeId());
+            edge.put("target", relation.getTargetNodeId());
+            edge.put("type", relation.getRelationType());
+            edge.put("weight", relation.getWeight());
+            edge.put("data", relation);
+            edges.add(edge);
+        }
+        
+        result.put("nodes", nodes);
+        result.put("edges", edges);
+        result.put("statistics", getGraphStatistics());
+        
+        return result;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getNodesByType(String nodeType) {
+        List<Map<String, Object>> nodes = new ArrayList<>();
+        
+        switch (nodeType.toLowerCase()) {
+            case "resource":
+                List<Resource> resources = resourceMapper.selectList(null);
+                for (Resource resource : resources) {
+                    Map<String, Object> node = new HashMap<>();
+                    node.put("id", "resource_" + resource.getId());
+                    node.put("type", "resource");
+                    node.put("name", resource.getResourceName());
+                    node.put("label", resource.getResourceType());
+                    node.put("data", resource);
+                    nodes.add(node);
+                }
+                break;
+            case "demand":
+                List<Demand> demands = demandMapper.selectList(null);
+                for (Demand demand : demands) {
+                    Map<String, Object> node = new HashMap<>();
+                    node.put("id", "demand_" + demand.getId());
+                    node.put("type", "demand");
+                    node.put("name", demand.getDemandType());
+                    node.put("label", "需求");
+                    node.put("data", demand);
+                    nodes.add(node);
+                }
+                break;
+            case "disaster":
+                List<Disaster> disasters = disasterMapper.selectList(null);
+                for (Disaster disaster : disasters) {
+                    Map<String, Object> node = new HashMap<>();
+                    node.put("id", "disaster_" + disaster.getId());
+                    node.put("type", "disaster");
+                    node.put("name", disaster.getDisasterType());
+                    node.put("label", "灾情");
+                    node.put("data", disaster);
+                    nodes.add(node);
+                }
+                break;
+        }
+        
+        return nodes;
+    }
+    
+    @Override
+    public Map<String, Object> getNodeConnections(Long nodeId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        // 获取节点信息
+        KnowledgeNode node = getNode(nodeId);
+        if (node == null) {
+            return result;
+        }
+        
+        result.put("node", node);
+        
+        // 获取所有关系
+        List<KnowledgeRelation> relations = getNodeRelations(nodeId);
+        result.put("relations", relations);
+        
+        // 获取邻居节点
+        List<KnowledgeNode> neighbors = getNeighborNodes(nodeId, null);
+        result.put("neighbors", neighbors);
+        
+        // 统计信息
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("relationCount", relations.size());
+        stats.put("neighborCount", neighbors.size());
+        
+        // 按关系类型统计
+        Map<String, Long> relationTypeStats = relations.stream()
+            .collect(Collectors.groupingBy(KnowledgeRelation::getRelationType, Collectors.counting()));
+        stats.put("relationTypeStats", relationTypeStats);
+        
+        result.put("statistics", stats);
+        
+        return result;
     }
     
     private String mapToJson(Map<String, Object> map) {

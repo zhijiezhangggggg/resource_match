@@ -136,10 +136,10 @@ public class DemandController {
         }
     }
 
-    @PutMapping("/status")
+    @PutMapping("/status/{id}")
     @Operation(summary = "更新需求状态", description = "更新需求处理状态")
     public Result<String> updateDemandStatus(
-            @Parameter(description = "需求ID", required = true) @RequestParam Long id,
+            @Parameter(description = "需求ID", required = true) @PathVariable Long id,
             @Parameter(description = "新状态", required = true) @RequestParam String status) {
         try {
             if (id == null || id <= 0) {

@@ -273,4 +273,49 @@ public class KnowledgeGraphController {
             return Result.error(20001, "获取图谱统计失败: " + e.getMessage());
         }
     }
+    
+    @Operation(summary = "获取前端知识图谱数据", description = "获取资源、需求、灾情节点及其关联关系，用于前端知识图谱展示")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "获取知识图谱数据成功"),
+            @ApiResponse(responseCode = "20001", description = "参数错误")
+    })
+    @GetMapping("/frontend-data")
+    public Result<Map<String, Object>> getFrontendKnowledgeGraphData() {
+        try {
+            Map<String, Object> graphData = knowledgeGraphService.getFrontendKnowledgeGraphData();
+            return Result.success("获取知识图谱数据成功", graphData);
+        } catch (Exception e) {
+            return Result.error(20001, "获取知识图谱数据失败: " + e.getMessage());
+        }
+    }
+    
+    @Operation(summary = "根据节点类型获取节点列表", description = "根据节点类型（resource、demand、disaster）获取对应的节点列表")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "获取节点列表成功"),
+            @ApiResponse(responseCode = "20001", description = "参数错误")
+    })
+    @GetMapping("/nodes/{nodeType}")
+    public Result<List<Map<String, Object>>> getNodesByType(@PathVariable String nodeType) {
+        try {
+            List<Map<String, Object>> nodes = knowledgeGraphService.getNodesByType(nodeType);
+            return Result.success("获取节点列表成功", nodes);
+        } catch (Exception e) {
+            return Result.error(20001, "获取节点列表失败: " + e.getMessage());
+        }
+    }
+    
+    @Operation(summary = "获取节点关联关系", description = "获取指定节点的所有关联关系")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "获取节点关联关系成功"),
+            @ApiResponse(responseCode = "20001", description = "参数错误")
+    })
+    @GetMapping("/node/{nodeId}/connections")
+    public Result<Map<String, Object>> getNodeConnections(@PathVariable Long nodeId) {
+        try {
+            Map<String, Object> connections = knowledgeGraphService.getNodeConnections(nodeId);
+            return Result.success("获取节点关联关系成功", connections);
+        } catch (Exception e) {
+            return Result.error(20001, "获取节点关联关系失败: " + e.getMessage());
+        }
+    }
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.disaster.emergency.entity.Resource;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -48,4 +49,11 @@ public interface ResourceService extends IService<Resource> {
      * 获取可用资源列表
      */
     List<Resource> getAvailableResources();
+    
+    /**
+     * 分配资源给指定需求
+     */
+    Map<String, Object> allocateResource(Long resourceId, Long demandId, Integer allocatedQuantity, 
+                                        String allocationReason, LocalDateTime estimatedArrivalTime, 
+                                        String allocator, String remarks);
 }
