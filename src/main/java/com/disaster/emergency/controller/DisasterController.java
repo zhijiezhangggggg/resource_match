@@ -58,6 +58,14 @@ public class DisasterController {
                 return Result.error(20001, "严重程度不能为空");
             }
             
+            // 验证经纬度
+            if (disaster.getLatitude() != null && (disaster.getLatitude() < -90.0 || disaster.getLatitude() > 90.0)) {
+                return Result.error(20001, "纬度必须在-90到90度之间");
+            }
+            if (disaster.getLongitude() != null && (disaster.getLongitude() < -180.0 || disaster.getLongitude() > 180.0)) {
+                return Result.error(20001, "经度必须在-180到180度之间");
+            }
+            
             // 验证手机号格式
             if (disaster.getReporterPhone() != null && !disaster.getReporterPhone().matches("^1[3-9]\\d{9}$")) {
                 return Result.error(20001, "手机号格式不正确");

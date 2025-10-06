@@ -54,6 +54,16 @@ public class Resource {
     @Schema(description = "区县", example = "朝阳区")
     private String district;
     
+    @DecimalMin(value = "-90.0", message = "纬度不能小于-90度")
+    @DecimalMax(value = "90.0", message = "纬度不能大于90度")
+    @Schema(description = "纬度", example = "39.9042")
+    private Double latitude;
+    
+    @DecimalMin(value = "-180.0", message = "经度不能小于-180度")
+    @DecimalMax(value = "180.0", message = "经度不能大于180度")
+    @Schema(description = "经度", example = "116.4074")
+    private Double longitude;
+    
     @Schema(description = "仓库名称", example = "中央仓库")
     private String warehouseName;
     

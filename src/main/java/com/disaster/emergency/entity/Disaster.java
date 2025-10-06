@@ -21,6 +21,8 @@ public class Disaster {
     private String province;
     private String city;
     private String district;
+    private Double latitude;
+    private Double longitude;
     private String severity;
     private String description;
     private String originalText;

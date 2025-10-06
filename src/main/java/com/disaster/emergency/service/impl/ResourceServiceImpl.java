@@ -153,7 +153,7 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> allocateResource(Long resourceId, Long demandId, Integer allocatedQuantity, 
-                                               String allocationReason, LocalDateTime estimatedArrivalTime, 
+                                               LocalDateTime estimatedArrivalTime, 
                                                String allocator, String remarks) {
         
         // 1. 验证资源是否存在
@@ -194,12 +194,12 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
         allocation.setResourceId(resourceId);
         allocation.setDemandId(demandId);
         allocation.setAllocatedQuantity(allocatedQuantity);
-        allocation.setAllocationReason(allocationReason);
-        allocation.setEstimatedArrivalTime(estimatedArrivalTime);
+        allocation.setSchedulerId(1L); // 默认调度员ID，实际应用中应该从当前用户获取
+        allocation.setSchedulerName(allocator != null ? allocator : "系统管理员");
+        allocation.setSchedulingTime(LocalDateTime.now());
+        allocation.setExpectedDeliveryTime(estimatedArrivalTime);
         allocation.setStatus("allocated");
-        allocation.setAllocator(allocator);
-        allocation.setAllocationTime(LocalDateTime.now());
-        allocation.setRemarks(remarks);
+        allocation.setRemark(remarks);
         allocation.setCreateTime(LocalDateTime.now());
         allocation.setUpdateTime(LocalDateTime.now());
         
@@ -218,15 +218,19 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
         }
         
         // 7. 建立知识图谱关联
+        System.out.println("开始建立知识图谱关联...");
         try {
             // 获取或创建资源节点
             String resourceNodeType = "resource";
             Long resourceBusinessId = resourceId;
             String resourceNodeName = resource.getResourceName();
             
+            System.out.println("处理资源节点 - 类型: " + resourceNodeType + ", 业务ID: " + resourceBusinessId + ", 名称: " + resourceNodeName);
+            
             // 检查资源节点是否已存在
             com.disaster.emergency.entity.KnowledgeNode resourceNode = knowledgeGraphService.getNodeByBusinessId(resourceNodeType, resourceBusinessId);
             if (resourceNode == null) {
+                System.out.println("资源节点不存在，创建新节点");
                 // 创建资源节点
                 Map<String, Object> resourceProperties = new HashMap<>();
                 resourceProperties.put("resourceType", resource.getResourceType());
@@ -242,7 +246,9 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
                 
                 Long resourceNodeId = knowledgeGraphService.createNode(resourceNodeType, resourceBusinessId, resourceNodeName, resourceProperties);
                 resourceNode = knowledgeGraphService.getNode(resourceNodeId);
+                System.out.println("资源节点创建成功，ID: " + resourceNodeId);
             } else {
+                System.out.println("资源节点已存在，ID: " + resourceNode.getId() + "，更新属性");
                 // 更新资源节点属性
                 Map<String, Object> resourceProperties = new HashMap<>();
                 resourceProperties.put("availableQuantity", newAvailableQuantity);
@@ -255,8 +261,11 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             Long demandBusinessId = demandId;
             String demandNodeName = demand.getDemandType();
             
+            System.out.println("处理需求节点 - 类型: " + demandNodeType + ", 业务ID: " + demandBusinessId + ", 名称: " + demandNodeName);
+            
             com.disaster.emergency.entity.KnowledgeNode demandNode = knowledgeGraphService.getNodeByBusinessId(demandNodeType, demandBusinessId);
             if (demandNode == null) {
+                System.out.println("需求节点不存在，创建新节点");
                 // 创建需求节点
                 Map<String, Object> demandProperties = new HashMap<>();
                 demandProperties.put("demandType", demand.getDemandType());
@@ -269,7 +278,9 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
                 
                 Long demandNodeId = knowledgeGraphService.createNode(demandNodeType, demandBusinessId, demandNodeName, demandProperties);
                 demandNode = knowledgeGraphService.getNode(demandNodeId);
+                System.out.println("需求节点创建成功，ID: " + demandNodeId);
             } else {
+                System.out.println("需求节点已存在，ID: " + demandNode.getId() + "，更新属性");
                 // 更新需求节点属性
                 Map<String, Object> demandProperties = new HashMap<>();
                 demandProperties.put("status", demand.getQuantity() <= allocatedQuantity ? "satisfied" : "pending");
@@ -277,15 +288,16 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             }
             
             // 创建资源分配关系
+            System.out.println("创建资源分配关系 - 源节点ID: " + resourceNode.getId() + ", 目标节点ID: " + demandNode.getId());
             Map<String, Object> relationProperties = new HashMap<>();
             relationProperties.put("allocatedQuantity", allocatedQuantity);
-            relationProperties.put("allocationReason", allocationReason);
+            relationProperties.put("allocationReason", "资源分配");
             relationProperties.put("estimatedArrivalTime", estimatedArrivalTime.toString());
             relationProperties.put("allocator", allocator);
             relationProperties.put("allocationTime", LocalDateTime.now().toString());
             relationProperties.put("remarks", remarks);
             
-            knowledgeGraphService.createRelation(
+            Long relationId = knowledgeGraphService.createRelation(
                 resourceNode.getId(), 
                 demandNode.getId(), 
                 "allocates", 
@@ -293,9 +305,12 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
                 relationProperties
             );
             
+            System.out.println("知识图谱关联创建成功，关系ID: " + relationId);
+            
         } catch (Exception e) {
             // 知识图谱操作失败不影响主流程，只记录日志
             System.err.println("知识图谱关联创建失败: " + e.getMessage());
+            e.printStackTrace();
         }
         
         // 8. 返回分配结果
@@ -305,7 +320,7 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
         result.put("demandId", demandId);
         result.put("allocatedQuantity", allocatedQuantity);
         result.put("remainingQuantity", newAvailableQuantity);
-        result.put("allocationTime", allocation.getAllocationTime());
+        result.put("allocationTime", allocation.getSchedulingTime());
         result.put("estimatedArrivalTime", estimatedArrivalTime);
         result.put("status", "allocated");
         

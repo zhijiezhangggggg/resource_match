@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -306,11 +307,49 @@ public class ResourceMatchingController {
     }
     
     /**
+     * 测试知识图谱关系创建功能
+     * 
+     * @param request 测试请求
+     * @return 测试结果
+     */
+    @Operation(summary = "测试知识图谱关系创建", description = "测试process-report接口中的知识图谱关系创建功能")
+    @PostMapping("/test-knowledge-graph-relations")
+    public Result<Map<String, Object>> testKnowledgeGraphRelations(@RequestBody Map<String, Object> request) {
+        try {
+            String reportType = (String) request.get("reportType");
+            String text = (String) request.get("text");
+            String location = (String) request.get("location");
+            String reporter = (String) request.get("reporter");
+            
+            if (reportType == null || text == null || text.trim().isEmpty()) {
+                return Result.error(20001, "报告类型和文本内容不能为空");
+            }
+            
+            // 解析文本
+            Map<String, Object> parseResult = textParseService.parseText(text, reportType);
+            
+            // 处理知识图谱操作（包含关系创建）
+            Map<String, Object> graphResult = processKnowledgeGraph(reportType, parseResult, location, reporter);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("parseResult", parseResult);
+            result.put("graphResult", graphResult);
+            result.put("testTime", java.time.LocalDateTime.now().toString());
+            
+            return Result.success("知识图谱关系创建测试成功", result);
+            
+        } catch (Exception e) {
+            return Result.error(20001, "知识图谱关系创建测试失败: " + e.getMessage());
+        }
+    }
+    
+    /**
      * 处理知识图谱操作
      */
     private Map<String, Object> processKnowledgeGraph(String reportType, Map<String, Object> parseResult, 
                                                      String location, String reporter) {
         Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> createdRelations = new ArrayList<>();
         
         try {
             // 根据解析结果创建或更新节点
@@ -324,23 +363,32 @@ public class ResourceMatchingController {
             Long businessId = generateBusinessId(reportType, parseResult);
             com.disaster.emergency.entity.KnowledgeNode existingNode = knowledgeGraphService.getNodeByBusinessId(nodeType, businessId);
             
+            Long currentNodeId;
             if (existingNode != null) {
                 // 更新现有节点
                 knowledgeGraphService.updateNodeProperties(existingNode.getId(), properties);
                 result.put("action", "updated");
                 result.put("nodeId", existingNode.getId());
+                currentNodeId = existingNode.getId();
             } else {
                 // 创建新节点
                 Long nodeId = knowledgeGraphService.createNode(nodeType, businessId, nodeName, properties);
                 result.put("action", "created");
                 result.put("nodeId", nodeId);
+                currentNodeId = nodeId;
             }
             
+            // 创建知识图谱关系
+            createdRelations = createKnowledgeGraphRelations(reportType, parseResult, currentNodeId, location);
+            
             result.put("status", "success");
+            result.put("createdRelations", createdRelations);
+            result.put("relationCount", createdRelations.size());
             
         } catch (Exception e) {
             result.put("status", "failed");
             result.put("error", e.getMessage());
+            result.put("createdRelations", createdRelations);
         }
         
         return result;
@@ -416,6 +464,340 @@ public class ResourceMatchingController {
     private Long generateBusinessId(String reportType, Map<String, Object> parseResult) {
         // 简单的业务ID生成逻辑，实际应该根据具体业务规则
         return System.currentTimeMillis() % 1000000;
+    }
+    
+    /**
+     * 创建知识图谱关系
+     */
+    private List<Map<String, Object>> createKnowledgeGraphRelations(String reportType, Map<String, Object> parseResult, 
+                                                                   Long currentNodeId, String location) {
+        List<Map<String, Object>> createdRelations = new ArrayList<>();
+        
+        try {
+            // 1. 创建需求与灾情的关系
+            if ("demand".equals(reportType)) {
+                createDemandDisasterRelation(parseResult, currentNodeId, createdRelations);
+            }
+            
+            // 2. 创建需求与资源类型的关系
+            if ("demand".equals(reportType)) {
+                createDemandResourceTypeRelation(parseResult, currentNodeId, createdRelations);
+            }
+            
+            // 3. 创建灾情与地理位置的关系
+            if ("disaster".equals(reportType)) {
+                createDisasterLocationRelation(parseResult, currentNodeId, location, createdRelations);
+            }
+            
+            // 4. 创建需求与地理位置的关系
+            if ("demand".equals(reportType)) {
+                createDemandLocationRelation(parseResult, currentNodeId, location, createdRelations);
+            }
+            
+            // 5. 创建需求与紧急程度的关系
+            if ("demand".equals(reportType)) {
+                createDemandUrgencyRelation(parseResult, currentNodeId, createdRelations);
+            }
+            
+            // 6. 创建灾情与严重程度的关系
+            if ("disaster".equals(reportType)) {
+                createDisasterSeverityRelation(parseResult, currentNodeId, createdRelations);
+            }
+            
+        } catch (Exception e) {
+            System.err.println("创建知识图谱关系时发生异常: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return createdRelations;
+    }
+    
+    /**
+     * 创建需求与灾情的关系
+     */
+    private void createDemandDisasterRelation(Map<String, Object> parseResult, Long demandNodeId, 
+                                            List<Map<String, Object>> createdRelations) {
+        try {
+            // 查找相关的灾情节点
+            String disasterType = (String) parseResult.get("disaster_type");
+            if (disasterType != null && !disasterType.trim().isEmpty()) {
+                // 查找相同类型的灾情节点
+                List<com.disaster.emergency.entity.KnowledgeNode> disasterNodes = 
+                    findNodesByTypeAndProperty("disaster", "disaster_type", disasterType);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode disasterNode : disasterNodes) {
+                    if (!disasterNode.getId().equals(demandNodeId)) {
+                        Map<String, Object> relationProperties = new HashMap<>();
+                        relationProperties.put("relationReason", "需求由灾情引发");
+                        relationProperties.put("disasterType", disasterType);
+                        relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                        
+                        Long relationId = knowledgeGraphService.createRelation(
+                            disasterNode.getId(), 
+                            demandNodeId, 
+                            "triggers", 
+                            0.8, 
+                            relationProperties
+                        );
+                        
+                        Map<String, Object> relationInfo = new HashMap<>();
+                        relationInfo.put("relationId", relationId);
+                        relationInfo.put("relationType", "triggers");
+                        relationInfo.put("sourceNodeId", disasterNode.getId());
+                        relationInfo.put("targetNodeId", demandNodeId);
+                        relationInfo.put("weight", 0.8);
+                        createdRelations.add(relationInfo);
+                        
+                        System.out.println("创建需求-灾情关系: " + disasterNode.getId() + " -> " + demandNodeId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建需求-灾情关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 创建需求与资源类型的关系
+     */
+    private void createDemandResourceTypeRelation(Map<String, Object> parseResult, Long demandNodeId, 
+                                                List<Map<String, Object>> createdRelations) {
+        try {
+            String demandType = (String) parseResult.get("demand_type");
+            if (demandType != null && !demandType.trim().isEmpty()) {
+                // 查找相同类型的资源节点
+                List<com.disaster.emergency.entity.KnowledgeNode> resourceNodes = 
+                    findNodesByTypeAndProperty("resource", "resource_type", demandType);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode resourceNode : resourceNodes) {
+                    Map<String, Object> relationProperties = new HashMap<>();
+                    relationProperties.put("relationReason", "需求匹配资源类型");
+                    relationProperties.put("demandType", demandType);
+                    relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                    
+                    Long relationId = knowledgeGraphService.createRelation(
+                        demandNodeId, 
+                        resourceNode.getId(), 
+                        "requires", 
+                        0.9, 
+                        relationProperties
+                    );
+                    
+                    Map<String, Object> relationInfo = new HashMap<>();
+                    relationInfo.put("relationId", relationId);
+                    relationInfo.put("relationType", "requires");
+                    relationInfo.put("sourceNodeId", demandNodeId);
+                    relationInfo.put("targetNodeId", resourceNode.getId());
+                    relationInfo.put("weight", 0.9);
+                    createdRelations.add(relationInfo);
+                    
+                    System.out.println("创建需求-资源关系: " + demandNodeId + " -> " + resourceNode.getId());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建需求-资源关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 创建灾情与地理位置的关系
+     */
+    private void createDisasterLocationRelation(Map<String, Object> parseResult, Long disasterNodeId, 
+                                              String location, List<Map<String, Object>> createdRelations) {
+        try {
+            if (location != null && !location.trim().isEmpty()) {
+                // 查找相同地理位置的节点
+                List<com.disaster.emergency.entity.KnowledgeNode> locationNodes = 
+                    findNodesByProperty("location", location);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode locationNode : locationNodes) {
+                    if (!locationNode.getId().equals(disasterNodeId)) {
+                        Map<String, Object> relationProperties = new HashMap<>();
+                        relationProperties.put("relationReason", "相同地理位置");
+                        relationProperties.put("location", location);
+                        relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                        
+                        Long relationId = knowledgeGraphService.createRelation(
+                            disasterNodeId, 
+                            locationNode.getId(), 
+                            "located_in", 
+                            0.7, 
+                            relationProperties
+                        );
+                        
+                        Map<String, Object> relationInfo = new HashMap<>();
+                        relationInfo.put("relationId", relationId);
+                        relationInfo.put("relationType", "located_in");
+                        relationInfo.put("sourceNodeId", disasterNodeId);
+                        relationInfo.put("targetNodeId", locationNode.getId());
+                        relationInfo.put("weight", 0.7);
+                        createdRelations.add(relationInfo);
+                        
+                        System.out.println("创建灾情-地理位置关系: " + disasterNodeId + " -> " + locationNode.getId());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建灾情-地理位置关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 创建需求与地理位置的关系
+     */
+    private void createDemandLocationRelation(Map<String, Object> parseResult, Long demandNodeId, 
+                                            String location, List<Map<String, Object>> createdRelations) {
+        try {
+            if (location != null && !location.trim().isEmpty()) {
+                // 查找相同地理位置的需求节点
+                List<com.disaster.emergency.entity.KnowledgeNode> locationNodes = 
+                    findNodesByTypeAndProperty("demand", "location", location);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode locationNode : locationNodes) {
+                    if (!locationNode.getId().equals(demandNodeId)) {
+                        Map<String, Object> relationProperties = new HashMap<>();
+                        relationProperties.put("relationReason", "相同地理位置需求");
+                        relationProperties.put("location", location);
+                        relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                        
+                        Long relationId = knowledgeGraphService.createRelation(
+                            demandNodeId, 
+                            locationNode.getId(), 
+                            "co_located", 
+                            0.6, 
+                            relationProperties
+                        );
+                        
+                        Map<String, Object> relationInfo = new HashMap<>();
+                        relationInfo.put("relationId", relationId);
+                        relationInfo.put("relationType", "co_located");
+                        relationInfo.put("sourceNodeId", demandNodeId);
+                        relationInfo.put("targetNodeId", locationNode.getId());
+                        relationInfo.put("weight", 0.6);
+                        createdRelations.add(relationInfo);
+                        
+                        System.out.println("创建需求-地理位置关系: " + demandNodeId + " -> " + locationNode.getId());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建需求-地理位置关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 创建需求与紧急程度的关系
+     */
+    private void createDemandUrgencyRelation(Map<String, Object> parseResult, Long demandNodeId, 
+                                           List<Map<String, Object>> createdRelations) {
+        try {
+            String urgency = (String) parseResult.get("urgency");
+            if (urgency != null && !urgency.trim().isEmpty()) {
+                // 查找相同紧急程度的需求节点
+                List<com.disaster.emergency.entity.KnowledgeNode> urgencyNodes = 
+                    findNodesByTypeAndProperty("demand", "urgency", urgency);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode urgencyNode : urgencyNodes) {
+                    if (!urgencyNode.getId().equals(demandNodeId)) {
+                        Map<String, Object> relationProperties = new HashMap<>();
+                        relationProperties.put("relationReason", "相同紧急程度");
+                        relationProperties.put("urgency", urgency);
+                        relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                        
+                        Long relationId = knowledgeGraphService.createRelation(
+                            demandNodeId, 
+                            urgencyNode.getId(), 
+                            "same_urgency", 
+                            0.5, 
+                            relationProperties
+                        );
+                        
+                        Map<String, Object> relationInfo = new HashMap<>();
+                        relationInfo.put("relationId", relationId);
+                        relationInfo.put("relationType", "same_urgency");
+                        relationInfo.put("sourceNodeId", demandNodeId);
+                        relationInfo.put("targetNodeId", urgencyNode.getId());
+                        relationInfo.put("weight", 0.5);
+                        createdRelations.add(relationInfo);
+                        
+                        System.out.println("创建需求-紧急程度关系: " + demandNodeId + " -> " + urgencyNode.getId());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建需求-紧急程度关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 创建灾情与严重程度的关系
+     */
+    private void createDisasterSeverityRelation(Map<String, Object> parseResult, Long disasterNodeId, 
+                                              List<Map<String, Object>> createdRelations) {
+        try {
+            String severity = (String) parseResult.get("severity");
+            if (severity != null && !severity.trim().isEmpty()) {
+                // 查找相同严重程度的灾情节点
+                List<com.disaster.emergency.entity.KnowledgeNode> severityNodes = 
+                    findNodesByTypeAndProperty("disaster", "severity", severity);
+                
+                for (com.disaster.emergency.entity.KnowledgeNode severityNode : severityNodes) {
+                    if (!severityNode.getId().equals(disasterNodeId)) {
+                        Map<String, Object> relationProperties = new HashMap<>();
+                        relationProperties.put("relationReason", "相同严重程度");
+                        relationProperties.put("severity", severity);
+                        relationProperties.put("createTime", java.time.LocalDateTime.now().toString());
+                        
+                        Long relationId = knowledgeGraphService.createRelation(
+                            disasterNodeId, 
+                            severityNode.getId(), 
+                            "same_severity", 
+                            0.5, 
+                            relationProperties
+                        );
+                        
+                        Map<String, Object> relationInfo = new HashMap<>();
+                        relationInfo.put("relationId", relationId);
+                        relationInfo.put("relationType", "same_severity");
+                        relationInfo.put("sourceNodeId", disasterNodeId);
+                        relationInfo.put("targetNodeId", severityNode.getId());
+                        relationInfo.put("weight", 0.5);
+                        createdRelations.add(relationInfo);
+                        
+                        System.out.println("创建灾情-严重程度关系: " + disasterNodeId + " -> " + severityNode.getId());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("创建灾情-严重程度关系失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据节点类型和属性查找节点
+     */
+    private List<com.disaster.emergency.entity.KnowledgeNode> findNodesByTypeAndProperty(String nodeType, 
+                                                                                        String propertyKey, 
+                                                                                        String propertyValue) {
+        try {
+            return knowledgeGraphService.findNodesByTypeAndProperty(nodeType, propertyKey, propertyValue);
+        } catch (Exception e) {
+            System.err.println("查找节点失败: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * 根据属性查找节点
+     */
+    private List<com.disaster.emergency.entity.KnowledgeNode> findNodesByProperty(String propertyKey, 
+                                                                                 String propertyValue) {
+        try {
+            return knowledgeGraphService.findNodesByProperty(propertyKey, propertyValue);
+        } catch (Exception e) {
+            System.err.println("查找节点失败: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
     
     

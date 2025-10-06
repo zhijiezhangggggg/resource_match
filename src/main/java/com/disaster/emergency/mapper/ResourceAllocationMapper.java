@@ -16,7 +16,7 @@ public interface ResourceAllocationMapper extends BaseMapper<ResourceAllocation>
      */
     @Select("SELECT resource_id as resourceId, COUNT(*) as allocationCount, " +
             "SUM(allocated_quantity) as totalAllocatedQuantity " +
-            "FROM resource_allocation GROUP BY resource_id")
+            "FROM scheduling_record GROUP BY resource_id")
     List<Map<String, Object>> getAllocationStatisticsByResource();
     
     /**
@@ -24,13 +24,13 @@ public interface ResourceAllocationMapper extends BaseMapper<ResourceAllocation>
      */
     @Select("SELECT demand_id as demandId, COUNT(*) as allocationCount, " +
             "SUM(allocated_quantity) as totalAllocatedQuantity " +
-            "FROM resource_allocation GROUP BY demand_id")
+            "FROM scheduling_record GROUP BY demand_id")
     List<Map<String, Object>> getAllocationStatisticsByDemand();
     
     /**
      * 按状态统计分配记录
      */
     @Select("SELECT status, COUNT(*) as count, SUM(allocated_quantity) as totalAllocatedQuantity " +
-            "FROM resource_allocation GROUP BY status")
+            "FROM scheduling_record GROUP BY status")
     List<Map<String, Object>> getAllocationStatisticsByStatus();
 }

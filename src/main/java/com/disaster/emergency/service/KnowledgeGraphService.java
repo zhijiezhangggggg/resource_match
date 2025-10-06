@@ -124,4 +124,21 @@ public interface KnowledgeGraphService {
      * @return 节点关联关系
      */
     Map<String, Object> getNodeConnections(Long nodeId);
+    
+    /**
+     * 根据节点类型和属性查找节点
+     * @param nodeType 节点类型
+     * @param propertyKey 属性键
+     * @param propertyValue 属性值
+     * @return 匹配的节点列表
+     */
+    List<KnowledgeNode> findNodesByTypeAndProperty(String nodeType, String propertyKey, String propertyValue);
+    
+    /**
+     * 根据属性查找节点
+     * @param propertyKey 属性键
+     * @param propertyValue 属性值
+     * @return 匹配的节点列表
+     */
+    List<KnowledgeNode> findNodesByProperty(String propertyKey, String propertyValue);
 }

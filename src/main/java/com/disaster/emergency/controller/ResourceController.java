@@ -62,6 +62,14 @@ public class ResourceController {
                 return Result.error(40001, "区县不能为空");
             }
             
+            // 验证经纬度
+            if (resource.getLatitude() != null && (resource.getLatitude() < -90.0 || resource.getLatitude() > 90.0)) {
+                return Result.error(40001, "纬度必须在-90到90度之间");
+            }
+            if (resource.getLongitude() != null && (resource.getLongitude() < -180.0 || resource.getLongitude() > 180.0)) {
+                return Result.error(40001, "经度必须在-180到180度之间");
+            }
+            
             // 验证联系电话格式
             if (resource.getContactPhone() != null && !resource.getContactPhone().matches("^1[3-9]\\d{9}$")) {
                 return Result.error(40001, "联系电话格式不正确");
@@ -176,6 +184,14 @@ public class ResourceController {
             }
             if (resource.getDistrict() == null || resource.getDistrict().trim().isEmpty()) {
                 return Result.error(40001, "区县不能为空");
+            }
+            
+            // 验证经纬度
+            if (resource.getLatitude() != null && (resource.getLatitude() < -90.0 || resource.getLatitude() > 90.0)) {
+                return Result.error(40001, "纬度必须在-90到90度之间");
+            }
+            if (resource.getLongitude() != null && (resource.getLongitude() < -180.0 || resource.getLongitude() > 180.0)) {
+                return Result.error(40001, "经度必须在-180到180度之间");
             }
             
             // 验证联系电话格式
@@ -357,7 +373,6 @@ public class ResourceController {
             
             Integer allocatedQuantity = (Integer) allocationRequest.get("allocatedQuantity");
             Long demandId = Long.valueOf(allocationRequest.get("demandId").toString());
-            String allocationReason = (String) allocationRequest.get("allocationReason");
             String estimatedArrivalTimeStr = (String) allocationRequest.get("estimatedArrivalTime");
             String allocator = (String) allocationRequest.get("allocator");
             String remarks = (String) allocationRequest.get("remarks");
@@ -367,12 +382,6 @@ public class ResourceController {
             }
             if (demandId == null || demandId <= 0) {
                 return Result.error(40001, "需求ID无效");
-            }
-            if (allocationReason == null || allocationReason.trim().isEmpty()) {
-                return Result.error(40001, "分配原因不能为空");
-            }
-            if (allocationReason.length() > 200) {
-                return Result.error(40001, "分配原因不能超过200个字符");
             }
             if (estimatedArrivalTimeStr == null || estimatedArrivalTimeStr.trim().isEmpty()) {
                 return Result.error(40001, "预计到达时间不能为空");
@@ -389,7 +398,7 @@ public class ResourceController {
             
             // 执行资源分配
             Map<String, Object> result = resourceService.allocateResource(
-                resourceId, demandId, allocatedQuantity, allocationReason, 
+                resourceId, demandId, allocatedQuantity, 
                 estimatedArrivalTime, allocator, remarks);
             
             return Result.success("资源分配成功", result);

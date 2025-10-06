@@ -11,7 +11,7 @@ import javax.validation.constraints.*;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("resource_allocation")
+@TableName("scheduling_record")
 @Schema(description = "资源分配记录实体")
 public class ResourceAllocation {
     
@@ -32,28 +32,29 @@ public class ResourceAllocation {
     @Schema(description = "分配数量", example = "10")
     private Integer allocatedQuantity;
     
-    @NotBlank(message = "分配原因不能为空")
-    @Size(max = 200, message = "分配原因不能超过200个字符")
-    @Schema(description = "分配原因", example = "紧急救灾需要")
-    private String allocationReason;
+    @Schema(description = "调度员ID", example = "1")
+    private Long schedulerId;
     
-    @NotNull(message = "预计到达时间不能为空")
-    @Schema(description = "预计到达时间", example = "2025-10-06 00:00:00")
+    @Schema(description = "调度员姓名", example = "张三")
+    private String schedulerName;
+    
+    @Schema(description = "调度时间")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime estimatedArrivalTime;
+    private LocalDateTime schedulingTime;
+    
+    @Schema(description = "预期送达时间", example = "2025-10-06 00:00:00")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime expectedDeliveryTime;
+    
+    @Schema(description = "实际送达时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime actualDeliveryTime;
     
     @Schema(description = "分配状态", example = "allocated")
     private String status;
     
-    @Schema(description = "分配人", example = "张三")
-    private String allocator;
-    
-    @Schema(description = "分配时间")
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
-    private LocalDateTime allocationTime;
-    
     @Schema(description = "备注", example = "优先配送")
-    private String remarks;
+    private String remark;
     
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "创建时间")

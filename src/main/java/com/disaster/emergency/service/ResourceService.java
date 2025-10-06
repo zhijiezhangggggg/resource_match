@@ -54,6 +54,6 @@ public interface ResourceService extends IService<Resource> {
      * 分配资源给指定需求
      */
     Map<String, Object> allocateResource(Long resourceId, Long demandId, Integer allocatedQuantity, 
-                                        String allocationReason, LocalDateTime estimatedArrivalTime, 
+                                        LocalDateTime estimatedArrivalTime, 
                                         String allocator, String remarks);
 }

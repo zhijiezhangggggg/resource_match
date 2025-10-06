@@ -54,6 +54,14 @@ public class DemandController {
                 return Result.error(30001, "区县不能为空");
             }
             
+            // 验证经纬度
+            if (demand.getLatitude() != null && (demand.getLatitude() < -90.0 || demand.getLatitude() > 90.0)) {
+                return Result.error(30001, "纬度必须在-90到90度之间");
+            }
+            if (demand.getLongitude() != null && (demand.getLongitude() < -180.0 || demand.getLongitude() > 180.0)) {
+                return Result.error(30001, "经度必须在-180到180度之间");
+            }
+            
             Demand submittedDemand = demandService.submitDemand(demand);
             return Result.success("需求提交成功", submittedDemand);
         } catch (Exception e) {

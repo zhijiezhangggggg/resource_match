@@ -13,6 +13,8 @@ import com.disaster.emergency.mapper.DisasterMapper;
 import com.disaster.emergency.service.KnowledgeGraphService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -38,35 +40,71 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     private DisasterMapper disasterMapper;
     
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Long createNode(String nodeType, Long businessId, String nodeName, Map<String, Object> properties) {
-        KnowledgeNode node = new KnowledgeNode();
-        node.setNodeType(nodeType);
-        node.setBusinessId(businessId);
-        node.setNodeName(nodeName);
-        node.setProperties(mapToJson(properties));
-        node.setStatus("active");
-        node.setCreateTime(LocalDateTime.now());
-        node.setUpdateTime(LocalDateTime.now());
-        
-        knowledgeNodeMapper.insert(node);
-        return node.getId();
+        try {
+            KnowledgeNode node = new KnowledgeNode();
+            node.setNodeType(nodeType);
+            node.setBusinessId(businessId);
+            node.setNodeName(nodeName);
+            
+            String propertiesJson = mapToJson(properties);
+            System.out.println("创建节点 - 类型: " + nodeType + ", 业务ID: " + businessId + ", 名称: " + nodeName);
+            System.out.println("节点属性JSON: " + propertiesJson);
+            
+            node.setProperties(propertiesJson);
+            node.setStatus("active");
+            node.setCreateTime(LocalDateTime.now());
+            node.setUpdateTime(LocalDateTime.now());
+            
+            int result = knowledgeNodeMapper.insert(node);
+            System.out.println("节点插入结果: " + result + ", 节点ID: " + node.getId());
+            
+            if (result <= 0) {
+                throw new RuntimeException("节点插入失败，影响行数: " + result);
+            }
+            
+            return node.getId();
+        } catch (Exception e) {
+            System.err.println("创建节点时发生异常: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
     
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Long createRelation(Long sourceNodeId, Long targetNodeId, String relationType, 
                               Double weight, Map<String, Object> properties) {
-        KnowledgeRelation relation = new KnowledgeRelation();
-        relation.setSourceNodeId(sourceNodeId);
-        relation.setTargetNodeId(targetNodeId);
-        relation.setRelationType(relationType);
-        relation.setWeight(new BigDecimal(weight != null ? weight : 1.0));
-        relation.setProperties(mapToJson(properties));
-        relation.setStatus("active");
-        relation.setCreateTime(LocalDateTime.now());
-        relation.setUpdateTime(LocalDateTime.now());
-        
-        knowledgeRelationMapper.insert(relation);
-        return relation.getId();
+        try {
+            KnowledgeRelation relation = new KnowledgeRelation();
+            relation.setSourceNodeId(sourceNodeId);
+            relation.setTargetNodeId(targetNodeId);
+            relation.setRelationType(relationType);
+            relation.setWeight(new BigDecimal(weight != null ? weight : 1.0));
+            
+            String propertiesJson = mapToJson(properties);
+            System.out.println("创建关系 - 源节点ID: " + sourceNodeId + ", 目标节点ID: " + targetNodeId + ", 关系类型: " + relationType);
+            System.out.println("关系属性JSON: " + propertiesJson);
+            
+            relation.setProperties(propertiesJson);
+            relation.setStatus("active");
+            relation.setCreateTime(LocalDateTime.now());
+            relation.setUpdateTime(LocalDateTime.now());
+            
+            int result = knowledgeRelationMapper.insert(relation);
+            System.out.println("关系插入结果: " + result + ", 关系ID: " + relation.getId());
+            
+            if (result <= 0) {
+                throw new RuntimeException("关系插入失败，影响行数: " + result);
+            }
+            
+            return relation.getId();
+        } catch (Exception e) {
+            System.err.println("创建关系时发生异常: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
     
     @Override
@@ -210,13 +248,21 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     }
     
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean updateNodeProperties(Long nodeId, Map<String, Object> properties) {
         KnowledgeNode node = getNode(nodeId);
         if (node == null) {
             return false;
         }
         
-        node.setProperties(mapToJson(properties));
+        // 合并属性而不是覆盖
+        Map<String, Object> existingProperties = jsonToMap(node.getProperties());
+        if (existingProperties == null) {
+            existingProperties = new HashMap<>();
+        }
+        existingProperties.putAll(properties);
+        
+        node.setProperties(mapToJson(existingProperties));
         node.setUpdateTime(LocalDateTime.now());
         
         return knowledgeNodeMapper.updateById(node) > 0;
@@ -418,13 +464,115 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
         
         StringBuilder json = new StringBuilder("{");
         for (Map.Entry<String, Object> entry : map.entrySet()) {
-            json.append("\"").append(entry.getKey()).append("\":\"")
-                .append(entry.getValue()).append("\",");
+            json.append("\"").append(entry.getKey()).append("\":");
+            
+            Object value = entry.getValue();
+            if (value == null) {
+                json.append("null");
+            } else if (value instanceof String) {
+                json.append("\"").append(value.toString().replace("\"", "\\\"")).append("\"");
+            } else if (value instanceof Number || value instanceof Boolean) {
+                json.append(value.toString());
+            } else {
+                json.append("\"").append(value.toString().replace("\"", "\\\"")).append("\"");
+            }
+            json.append(",");
         }
         if (json.length() > 1) {
             json.setLength(json.length() - 1);
         }
         json.append("}");
         return json.toString();
+    }
+    
+    private Map<String, Object> jsonToMap(String json) {
+        if (json == null || json.trim().isEmpty() || "{}".equals(json.trim())) {
+            return new HashMap<>();
+        }
+        
+        Map<String, Object> map = new HashMap<>();
+        try {
+            // 简单的JSON解析，处理基本的key-value对
+            json = json.trim();
+            if (json.startsWith("{") && json.endsWith("}")) {
+                json = json.substring(1, json.length() - 1);
+                String[] pairs = json.split(",");
+                for (String pair : pairs) {
+                    String[] keyValue = pair.split(":", 2);
+                    if (keyValue.length == 2) {
+                        String key = keyValue[0].trim().replaceAll("\"", "");
+                        String value = keyValue[1].trim();
+                        
+                        // 处理不同类型的值
+                        if ("null".equals(value)) {
+                            map.put(key, null);
+                        } else if (value.startsWith("\"") && value.endsWith("\"")) {
+                            map.put(key, value.substring(1, value.length() - 1));
+                        } else if ("true".equals(value) || "false".equals(value)) {
+                            map.put(key, Boolean.parseBoolean(value));
+                        } else {
+                            try {
+                                // 尝试解析为数字
+                                if (value.contains(".")) {
+                                    map.put(key, Double.parseDouble(value));
+                                } else {
+                                    map.put(key, Long.parseLong(value));
+                                }
+                            } catch (NumberFormatException e) {
+                                map.put(key, value);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 如果解析失败，返回空Map
+            System.err.println("JSON解析失败: " + e.getMessage());
+        }
+        
+        return map;
+    }
+    
+    @Override
+    public List<KnowledgeNode> findNodesByTypeAndProperty(String nodeType, String propertyKey, String propertyValue) {
+        try {
+            List<KnowledgeNode> allNodes = knowledgeNodeMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<KnowledgeNode>()
+                    .eq("node_type", nodeType)
+            );
+            
+            List<KnowledgeNode> matchedNodes = new ArrayList<>();
+            for (KnowledgeNode node : allNodes) {
+                Map<String, Object> properties = jsonToMap(node.getProperties());
+                if (properties != null && propertyValue.equals(properties.get(propertyKey))) {
+                    matchedNodes.add(node);
+                }
+            }
+            
+            return matchedNodes;
+        } catch (Exception e) {
+            System.err.println("根据类型和属性查找节点失败: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+    
+    @Override
+    public List<KnowledgeNode> findNodesByProperty(String propertyKey, String propertyValue) {
+        try {
+            List<KnowledgeNode> allNodes = knowledgeNodeMapper.selectList(null);
+            
+            List<KnowledgeNode> matchedNodes = new ArrayList<>();
+            for (KnowledgeNode node : allNodes) {
+                Map<String, Object> properties = jsonToMap(node.getProperties());
+                if (properties != null && propertyValue.equals(properties.get(propertyKey))) {
+                    matchedNodes.add(node);
+                }
+            }
+            
+            return matchedNodes;
+        } catch (Exception e) {
+            System.err.println("根据属性查找节点失败: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
 }

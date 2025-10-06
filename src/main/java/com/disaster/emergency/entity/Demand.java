@@ -21,6 +21,8 @@ public class Demand {
     private String province;
     private String city;
     private String district;
+    private Double latitude;
+    private Double longitude;
     private String description;
     private String status;
     
