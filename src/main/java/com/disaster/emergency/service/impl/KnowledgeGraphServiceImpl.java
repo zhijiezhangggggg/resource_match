@@ -1,15 +1,18 @@
 package com.disaster.emergency.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.disaster.emergency.entity.KnowledgeNode;
 import com.disaster.emergency.entity.KnowledgeRelation;
 import com.disaster.emergency.entity.Resource;
 import com.disaster.emergency.entity.Demand;
 import com.disaster.emergency.entity.Disaster;
+import com.disaster.emergency.entity.MatchingRecord;
 import com.disaster.emergency.mapper.KnowledgeNodeMapper;
 import com.disaster.emergency.mapper.KnowledgeRelationMapper;
 import com.disaster.emergency.mapper.ResourceMapper;
 import com.disaster.emergency.mapper.DemandMapper;
 import com.disaster.emergency.mapper.DisasterMapper;
+import com.disaster.emergency.mapper.MatchingRecordMapper;
 import com.disaster.emergency.service.KnowledgeGraphService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -38,6 +41,9 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     
     @Autowired
     private DisasterMapper disasterMapper;
+    
+    @Autowired
+    private MatchingRecordMapper matchingRecordMapper;
     
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -316,61 +322,81 @@ public class KnowledgeGraphServiceImpl implements KnowledgeGraphService {
     public Map<String, Object> getFrontendKnowledgeGraphData() {
         Map<String, Object> result = new HashMap<>();
         
-        // 获取所有节点
-        List<Map<String, Object>> nodes = new ArrayList<>();
-        
-        // 获取资源节点
-        List<Resource> resources = resourceMapper.selectList(null);
-        for (Resource resource : resources) {
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", "resource_" + resource.getId());
-            node.put("type", "resource");
-            node.put("name", resource.getResourceName());
-            node.put("label", resource.getResourceType());
-            node.put("data", resource);
-            nodes.add(node);
-        }
-        
-        // 获取需求节点
-        List<Demand> demands = demandMapper.selectList(null);
-        for (Demand demand : demands) {
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", "demand_" + demand.getId());
-            node.put("type", "demand");
-            node.put("name", demand.getDemandType());
-            node.put("label", "需求");
-            node.put("data", demand);
-            nodes.add(node);
-        }
-        
-        // 获取灾情节点
+        // 获取所有灾情数据
         List<Disaster> disasters = disasterMapper.selectList(null);
+        List<Map<String, Object>> disasterNodes = new ArrayList<>();
+        
         for (Disaster disaster : disasters) {
-            Map<String, Object> node = new HashMap<>();
-            node.put("id", "disaster_" + disaster.getId());
-            node.put("type", "disaster");
-            node.put("name", disaster.getDisasterType());
-            node.put("label", "灾情");
-            node.put("data", disaster);
-            nodes.add(node);
+            Map<String, Object> disasterNode = new HashMap<>();
+            disasterNode.put("id", disaster.getId());
+            disasterNode.put("type", "disaster");
+            disasterNode.put("name", disaster.getDisasterType());
+            disasterNode.put("label", "灾情");
+            disasterNode.put("data", disaster);
+            
+            // 获取该灾情下的所有需求
+            List<Map<String, Object>> demandNodes = new ArrayList<>();
+            List<Demand> demands = demandMapper.selectList(
+                new QueryWrapper<Demand>().eq("disaster_id", disaster.getId())
+            );
+            
+            for (Demand demand : demands) {
+                Map<String, Object> demandNode = new HashMap<>();
+                demandNode.put("id", demand.getId());
+                demandNode.put("type", "demand");
+                demandNode.put("name", demand.getDemandType());
+                demandNode.put("label", "需求");
+                demandNode.put("data", demand);
+                
+                // 获取该需求关联的所有资源
+                List<Map<String, Object>> resourceNodes = new ArrayList<>();
+                List<MatchingRecord> matchingRecords = matchingRecordMapper.selectList(
+                    new QueryWrapper<MatchingRecord>().eq("demand_id", demand.getId())
+                );
+                
+                // 如果没有匹配记录，尝试根据需求类型匹配资源
+                if (matchingRecords.isEmpty()) {
+                    List<Resource> availableResources = resourceMapper.selectList(
+                        new QueryWrapper<Resource>()
+                            .eq("resource_type", demand.getDemandType())
+                            .eq("status", "available")
+                    );
+                    
+                    for (Resource resource : availableResources) {
+                        Map<String, Object> resourceNode = new HashMap<>();
+                        resourceNode.put("id", resource.getId());
+                        resourceNode.put("type", "resource");
+                        resourceNode.put("name", resource.getResourceName());
+                        resourceNode.put("label", resource.getResourceType());
+                        resourceNode.put("data", resource);
+                        resourceNode.put("matchingInfo", null); // 没有匹配记录
+                        resourceNodes.add(resourceNode);
+                    }
+                } else {
+                    for (MatchingRecord matchingRecord : matchingRecords) {
+                        Resource resource = resourceMapper.selectById(matchingRecord.getResourceId());
+                        if (resource != null) {
+                            Map<String, Object> resourceNode = new HashMap<>();
+                            resourceNode.put("id", resource.getId());
+                            resourceNode.put("type", "resource");
+                            resourceNode.put("name", resource.getResourceName());
+                            resourceNode.put("label", resource.getResourceType());
+                            resourceNode.put("data", resource);
+                            resourceNode.put("matchingInfo", matchingRecord);
+                            resourceNodes.add(resourceNode);
+                        }
+                    }
+                }
+                
+                demandNode.put("resources", resourceNodes);
+                demandNodes.add(demandNode);
+            }
+            
+            disasterNode.put("demands", demandNodes);
+            disasterNodes.add(disasterNode);
         }
         
-        // 获取所有关系
-        List<Map<String, Object>> edges = new ArrayList<>();
-        List<KnowledgeRelation> relations = knowledgeRelationMapper.selectList(null);
-        for (KnowledgeRelation relation : relations) {
-            Map<String, Object> edge = new HashMap<>();
-            edge.put("id", "relation_" + relation.getId());
-            edge.put("source", relation.getSourceNodeId());
-            edge.put("target", relation.getTargetNodeId());
-            edge.put("type", relation.getRelationType());
-            edge.put("weight", relation.getWeight());
-            edge.put("data", relation);
-            edges.add(edge);
-        }
-        
-        result.put("nodes", nodes);
-        result.put("edges", edges);
+        result.put("disasters", disasterNodes);
         result.put("statistics", getGraphStatistics());
         
         return result;
