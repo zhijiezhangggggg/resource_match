@@ -132,10 +132,52 @@ public class DemandController {
                 return Result.error(30002, "需求不存在");
             }
             
-            demand.setUpdateTime(LocalDateTime.now());
-            boolean success = demandService.updateById(demand);
+            // 合并现有数据和新数据，只更新非空字段
+            if (demand.getDisasterId() != null) {
+                existingDemand.setDisasterId(demand.getDisasterId());
+            }
+            if (demand.getDemandType() != null) {
+                existingDemand.setDemandType(demand.getDemandType());
+            }
+            if (demand.getQuantity() != null) {
+                existingDemand.setQuantity(demand.getQuantity());
+            }
+            if (demand.getUnit() != null) {
+                existingDemand.setUnit(demand.getUnit());
+            }
+            if (demand.getUrgency() != null) {
+                existingDemand.setUrgency(demand.getUrgency());
+            }
+            if (demand.getProvince() != null) {
+                existingDemand.setProvince(demand.getProvince());
+            }
+            if (demand.getCity() != null) {
+                existingDemand.setCity(demand.getCity());
+            }
+            if (demand.getDistrict() != null) {
+                existingDemand.setDistrict(demand.getDistrict());
+            }
+            if (demand.getLatitude() != null) {
+                existingDemand.setLatitude(demand.getLatitude());
+            }
+            if (demand.getLongitude() != null) {
+                existingDemand.setLongitude(demand.getLongitude());
+            }
+            if (demand.getDescription() != null) {
+                existingDemand.setDescription(demand.getDescription());
+            }
+            if (demand.getStatus() != null) {
+                existingDemand.setStatus(demand.getStatus());
+            }
+            // 始终更新update_time
+            existingDemand.setUpdateTime(LocalDateTime.now());
+            
+            // 使用updateById确保执行UPDATE操作，不会误判为INSERT
+            boolean success = demandService.updateById(existingDemand);
             if (success) {
-                return Result.success("更新成功", demand);
+                // 返回更新后的完整对象
+                Demand updatedDemand = demandService.getById(demand.getId());
+                return Result.success("更新成功", updatedDemand);
             } else {
                 return Result.error(30001, "更新失败");
             }

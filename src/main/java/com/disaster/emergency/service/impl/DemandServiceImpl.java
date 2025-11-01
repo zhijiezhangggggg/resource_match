@@ -20,9 +20,21 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
 
     @Override
     public Demand submitDemand(Demand demand) {
+        // 提交需求时，如果ID已存在，说明这不是新增操作，应该拒绝
+        if (demand.getId() != null && demand.getId() > 0) {
+            // 检查数据库中是否已存在该ID
+            Demand existing = getById(demand.getId());
+            if (existing != null) {
+                throw new RuntimeException("ID已存在，请使用更新接口而非提交接口");
+            }
+        }
+        
+        // 确保新增时ID为空，让数据库自动生成
+        demand.setId(null);
         demand.setStatus("pending");
         demand.setCreateTime(LocalDateTime.now());
         demand.setUpdateTime(LocalDateTime.now());
+        // 使用insert方法明确执行INSERT操作，避免save方法的saveOrUpdate逻辑
         save(demand);
         return demand;
     }

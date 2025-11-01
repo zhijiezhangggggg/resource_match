@@ -47,8 +47,9 @@ public class MapController {
             disasterMap.put("province", disaster.getProvince());
             disasterMap.put("city", disaster.getCity());
             disasterMap.put("district", disaster.getDistrict());
-            disasterMap.put("longitude", disaster.getLongitude() != null ? disaster.getLongitude() : 103.6276); // 使用真实坐标，如果没有则使用默认值
-            disasterMap.put("latitude", disaster.getLatitude() != null ? disaster.getLatitude() : 31.1311);
+            // 直接返回真实的经纬度，如果为空则返回null，让前端处理
+            disasterMap.put("longitude", disaster.getLongitude());
+            disasterMap.put("latitude", disaster.getLatitude());
             disasterMap.put("status", disaster.getStatus());
             disasterMap.put("occurTime", disaster.getOccurTime());
             disasterMap.put("demandCount", (int)(Math.random() * 10) + 1); // 模拟需求数量
@@ -78,8 +79,9 @@ public class MapController {
             resourceMap.put("province", resource.getProvince());
             resourceMap.put("city", resource.getCity());
             resourceMap.put("district", resource.getDistrict());
-            resourceMap.put("longitude", resource.getLongitude() != null ? resource.getLongitude() : 103.9238); // 使用真实坐标，如果没有则使用默认值
-            resourceMap.put("latitude", resource.getLatitude() != null ? resource.getLatitude() : 30.5728);
+            // 直接返回真实的经纬度，如果为空则返回null，让前端处理
+            resourceMap.put("longitude", resource.getLongitude());
+            resourceMap.put("latitude", resource.getLatitude());
             resourceMap.put("warehouseName", resource.getWarehouseName());
             resourceMap.put("status", resource.getStatus());
             
@@ -110,8 +112,9 @@ public class MapController {
             demandMap.put("province", demand.getProvince());
             demandMap.put("city", demand.getCity());
             demandMap.put("district", demand.getDistrict());
-            demandMap.put("longitude", demand.getLongitude() != null ? demand.getLongitude() : 103.6276); // 使用真实坐标，如果没有则使用默认值
-            demandMap.put("latitude", demand.getLatitude() != null ? demand.getLatitude() : 31.1311);
+            // 直接返回真实的经纬度，如果为空则返回null，让前端处理
+            demandMap.put("longitude", demand.getLongitude());
+            demandMap.put("latitude", demand.getLatitude());
             demandMap.put("status", demand.getStatus());
             demandMap.put("createTime", demand.getCreateTime());
             

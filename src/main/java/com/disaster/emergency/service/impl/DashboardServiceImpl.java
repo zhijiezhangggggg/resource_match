@@ -478,9 +478,13 @@ public class DashboardServiceImpl implements DashboardService {
         point.put("province", resource.getProvince());
         point.put("city", resource.getCity());
         point.put("district", resource.getDistrict());
+        point.put("latitude", resource.getLatitude()); // 添加经纬度字段
+        point.put("longitude", resource.getLongitude());
         point.put("availableQuantity", resource.getAvailableQuantity());
         point.put("totalQuantity", resource.getTotalQuantity());
         point.put("status", resource.getStatus());
+        point.put("warehouseName", resource.getWarehouseName());
+        point.put("contactPerson", resource.getContactPerson());
         return point;
     }
 
@@ -489,11 +493,16 @@ public class DashboardServiceImpl implements DashboardService {
         point.put("id", demand.getId());
         point.put("type", demand.getDemandType());
         point.put("quantity", demand.getQuantity());
+        point.put("unit", demand.getUnit());
         point.put("province", demand.getProvince());
         point.put("city", demand.getCity());
         point.put("district", demand.getDistrict());
+        point.put("latitude", demand.getLatitude()); // 添加经纬度字段
+        point.put("longitude", demand.getLongitude());
         point.put("urgency", demand.getUrgency());
         point.put("status", demand.getStatus());
+        point.put("description", demand.getDescription());
+        point.put("createTime", demand.getCreateTime());
         return point;
     }
 
@@ -505,7 +514,11 @@ public class DashboardServiceImpl implements DashboardService {
         point.put("province", disaster.getProvince());
         point.put("city", disaster.getCity());
         point.put("district", disaster.getDistrict());
+        point.put("latitude", disaster.getLatitude()); // 添加经纬度字段
+        point.put("longitude", disaster.getLongitude());
         point.put("status", disaster.getStatus());
+        point.put("occurTime", disaster.getOccurTime());
+        point.put("description", disaster.getDescription());
         return point;
     }
 }
