@@ -100,7 +100,7 @@ public class DemandController {
         }
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     @Operation(summary = "查询需求详情", description = "根据ID查询需求详细信息")
     public Result<Demand> getDemandDetail(@Parameter(description = "需求ID", required = true) @PathVariable Long id) {
         if (id == null || id <= 0) {
@@ -186,20 +186,45 @@ public class DemandController {
         }
     }
 
-    @PutMapping("/status/{id}")
-    @Operation(summary = "更新需求状态", description = "更新需求处理状态")
+    @PutMapping("/status")
+    @Operation(summary = "更新需求状态", description = "更新需求处理状态，支持请求参数和请求体两种方式")
     public Result<String> updateDemandStatus(
-            @Parameter(description = "需求ID", required = true) @PathVariable Long id,
-            @Parameter(description = "新状态", required = true) @RequestParam String status) {
+            @Parameter(description = "需求ID") @RequestParam(required = false) Long id,
+            @Parameter(description = "新状态") @RequestParam(required = false) String status,
+            @Parameter(description = "请求体（可选，如果提供则使用请求体中的参数）") @RequestBody(required = false) Map<String, Object> requestBody) {
         try {
-            if (id == null || id <= 0) {
+            Long demandId;
+            String newStatus;
+            
+            // 优先使用请求体，如果请求体为空则使用请求参数
+            if (requestBody != null && !requestBody.isEmpty()) {
+                Object idObj = requestBody.get("id");
+                Object statusObj = requestBody.get("status");
+                
+                if (idObj != null) {
+                    demandId = idObj instanceof Number ? ((Number) idObj).longValue() : Long.parseLong(idObj.toString());
+                } else {
+                    demandId = id;
+                }
+                
+                if (statusObj != null) {
+                    newStatus = statusObj.toString();
+                } else {
+                    newStatus = status;
+                }
+            } else {
+                demandId = id;
+                newStatus = status;
+            }
+            
+            if (demandId == null || demandId <= 0) {
                 return Result.error(30002, "需求ID不能为空或无效");
             }
-            if (status == null || status.trim().isEmpty()) {
+            if (newStatus == null || newStatus.trim().isEmpty()) {
                 return Result.error(30001, "状态不能为空");
             }
             
-            boolean success = demandService.updateDemandStatus(id, status);
+            boolean success = demandService.updateDemandStatus(demandId, newStatus);
             if (success) {
                 return Result.success("状态更新成功", null);
             } else {
@@ -210,7 +235,26 @@ public class DemandController {
         }
     }
 
-    @DeleteMapping("/{id}")
+    @PutMapping("/status/{id:\\d+}")
+    @Operation(summary = "更新需求状态(RESTful)", description = "根据ID更新需求处理状态")
+    public Result<String> updateDemandStatusById(
+            @Parameter(description = "需求ID", required = true) @PathVariable Long id,
+            @Parameter(description = "新状态", required = true) @RequestParam String status) {
+        // 委托给主方法处理，传递null作为请求体（使用请求参数）
+        return updateDemandStatus(id, status, null);
+    }
+
+    @PutMapping("/{id:\\d+}")
+    @Operation(summary = "更新需求(RESTful)", description = "根据ID更新需求信息")
+    public Result<Demand> updateDemandById(
+            @Parameter(description = "需求ID", required = true) @PathVariable Long id,
+            @Parameter(description = "需求信息", required = true) @RequestBody Demand demand) {
+        // 设置ID，确保使用路径中的ID
+        demand.setId(id);
+        return updateDemand(demand);
+    }
+
+    @DeleteMapping("/{id:\\d+}")
     @Operation(summary = "删除需求", description = "根据ID删除需求")
     public Result<String> deleteDemand(@Parameter(description = "需求ID", required = true) @PathVariable Long id) {
         try {
