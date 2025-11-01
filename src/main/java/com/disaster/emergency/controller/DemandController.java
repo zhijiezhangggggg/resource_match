@@ -118,8 +118,8 @@ public class DemandController {
         }
     }
 
-    @PutMapping("/update")
-    @Operation(summary = "更新需求", description = "更新需求信息")
+    @RequestMapping(value = "/update", method = {RequestMethod.PUT, RequestMethod.POST})
+    @Operation(summary = "更新需求", description = "更新需求信息，支持PUT和POST方法")
     public Result<Demand> updateDemand(@Parameter(description = "需求信息", required = true) @RequestBody Demand demand) {
         try {
             if (demand.getId() == null || demand.getId() <= 0) {
