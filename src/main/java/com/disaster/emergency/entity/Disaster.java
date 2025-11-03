@@ -1,6 +1,7 @@
 package com.disaster.emergency.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -27,7 +28,11 @@ public class Disaster {
     private String description;
     private String originalText;
     private String parsedData;
+    
+    @TableField("reporter_name")
     private String reporterName;
+    
+    @TableField("reporter_phone")
     private String reporterPhone;
     // 暂时注释掉不存在的字段
     // private Long reporterId;

@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.disaster.emergency.entity.Demand;
+import com.disaster.emergency.entity.Disaster;
 import com.disaster.emergency.mapper.DemandMapper;
 import com.disaster.emergency.service.DemandService;
+import com.disaster.emergency.service.DisasterService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -17,6 +20,9 @@ import java.util.Map;
 
 @Service
 public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> implements DemandService {
+
+    @Autowired
+    private DisasterService disasterService;
 
     @Override
     public Demand submitDemand(Demand demand) {
@@ -65,7 +71,21 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
         }
         
         queryWrapper.orderByDesc("create_time");
-        return page(pageParam, queryWrapper);
+        Page<Demand> result = page(pageParam, queryWrapper);
+        
+        // 填充提交人信息（从关联的disaster表获取）
+        if (result != null && result.getRecords() != null && !result.getRecords().isEmpty()) {
+            for (Demand demand : result.getRecords()) {
+                if (demand.getDisasterId() != null) {
+                    Disaster disaster = disasterService.getById(demand.getDisasterId());
+                    if (disaster != null) {
+                        demand.setSubmitterName(disaster.getReporterName());
+                    }
+                }
+            }
+        }
+        
+        return result;
     }
 
     @Override
