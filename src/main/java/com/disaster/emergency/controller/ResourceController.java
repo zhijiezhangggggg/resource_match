@@ -3,6 +3,7 @@ package com.disaster.emergency.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.disaster.emergency.common.Result;
 import com.disaster.emergency.entity.Resource;
+import com.disaster.emergency.service.OrganizationService;
 import com.disaster.emergency.service.ResourceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,6 +25,9 @@ public class ResourceController {
 
     @Autowired
     private ResourceService resourceService;
+    
+    @Autowired
+    private OrganizationService organizationService;
 
     @Operation(summary = "保存资源", description = "新增或更新资源信息")
     @ApiResponses(value = {
@@ -73,6 +77,13 @@ public class ResourceController {
             // 验证联系电话格式
             if (resource.getContactPhone() != null && !resource.getContactPhone().matches("^1[3-9]\\d{9}$")) {
                 return Result.error(40001, "联系电话格式不正确");
+            }
+            
+            // 验证组织ID是否存在（如果提供了组织ID）
+            if (resource.getOrganizationId() != null) {
+                if (organizationService.getById(resource.getOrganizationId()) == null) {
+                    return Result.error(40001, "组织ID不存在，请检查组织ID是否正确");
+                }
             }
             
             Resource savedResource = resourceService.saveResource(resource);
@@ -197,6 +208,13 @@ public class ResourceController {
             // 验证联系电话格式
             if (resource.getContactPhone() != null && !resource.getContactPhone().matches("^1[3-9]\\d{9}$")) {
                 return Result.error(40001, "联系电话格式不正确");
+            }
+            
+            // 验证组织ID是否存在（如果提供了组织ID）
+            if (resource.getOrganizationId() != null) {
+                if (organizationService.getById(resource.getOrganizationId()) == null) {
+                    return Result.error(40001, "组织ID不存在，请检查组织ID是否正确");
+                }
             }
             
             resource.setId(id);
