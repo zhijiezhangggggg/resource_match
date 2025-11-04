@@ -143,28 +143,49 @@ public class ResourceMatchingController {
             List<Map<String, Object>> similarityResults = similarityCalculationService
                 .calculateBatchSimilarity(resources, demand, limit);
             
-            // 执行调度优化
+            boolean hasMatches = similarityResults != null && !similarityResults.isEmpty();
+            
+            // 执行调度优化（仅当存在候选匹配时）
             Map<String, Object> schedulingResult = schedulingService
                 .optimizeResourceAllocation(Arrays.asList(demand), resources, algorithm);
+            
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> allocations = (List<Map<String, Object>>) schedulingResult.get("allocations");
+            boolean hasAllocations = allocations != null && !allocations.isEmpty();
             
             // 计算调度效果评估
             Map<String, Object> metrics = schedulingService.calculateSchedulingMetrics(schedulingResult);
             
-            // 保存匹配记录到数据库
-            saveMatchingRecords(demandId, similarityResults);
+            // 仅当有匹配结果时才保存匹配记录
+            if (hasMatches) {
+                saveMatchingRecords(demandId, similarityResults);
+                // 有匹配结果，更新为matched
+                updateDemandStatus(demandId, "matched");
+            } else {
+                // 无匹配结果，更新为match_failed
+                updateDemandStatus(demandId, "match_failed");
+            }
             
-            // 保存调度记录到数据库
-            saveSchedulingRecords(demandId, schedulingResult);
-            
-            // 更新需求状态为已匹配
-            updateDemandStatus(demandId, "matched");
+            // 仅当有调度分配时才保存调度记录并更新需求状态
+            if (hasAllocations) {
+                saveSchedulingRecords(demandId, schedulingResult);
+                // 有调度分配，更新为allocated
+                updateDemandStatus(demandId, "allocated");
+            }
             
             Map<String, Object> result = new HashMap<>();
             result.put("similarityResults", similarityResults);
             result.put("schedulingResult", schedulingResult);
             result.put("metrics", metrics);
             result.put("algorithm", algorithm);
+            result.put("hasMatches", hasMatches);
+            result.put("hasAllocations", hasAllocations);
+            result.put("schedulingStatus", "ended");
             result.put("timestamp", java.time.LocalDateTime.now().toString());
+            
+            if (!hasMatches) {
+                return Result.error(20001, "资源匹配失败: 无可用资源");
+            }
             
             return Result.success("资源匹配成功", result);
             
@@ -412,24 +433,36 @@ public class ResourceMatchingController {
             // 计算相似度
             List<Map<String, Object>> similarityResults = similarityCalculationService
                 .calculateBatchSimilarity(resources, demand, 10);
+            boolean hasMatches = similarityResults != null && !similarityResults.isEmpty();
             
             // 执行调度优化
             Map<String, Object> schedulingResult = schedulingService
                 .optimizeResourceAllocation(Arrays.asList(demand), resources, "greedy");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> allocations = (List<Map<String, Object>>) schedulingResult.get("allocations");
+            boolean hasAllocations = allocations != null && !allocations.isEmpty();
             
-            // 保存匹配记录到数据库
-            saveMatchingRecords(demandId, similarityResults);
+            // 仅当有匹配结果时才保存匹配记录
+            if (hasMatches) {
+                saveMatchingRecords(demandId, similarityResults);
+                updateDemandStatus(demandId, "matched");
+            } else {
+                updateDemandStatus(demandId, "match_failed");
+            }
             
-            // 保存调度记录到数据库
-            saveSchedulingRecords(demandId, schedulingResult);
-            
-            // 更新需求状态为已匹配
-            updateDemandStatus(demandId, "matched");
+            // 仅当有调度分配时才保存调度记录并更新需求状态
+            if (hasAllocations) {
+                saveSchedulingRecords(demandId, schedulingResult);
+                updateDemandStatus(demandId, "allocated");
+            }
             
             result.put("demandId", demandId);
             result.put("similarityResults", similarityResults);
             result.put("schedulingResult", schedulingResult);
-            result.put("status", "success");
+            result.put("hasMatches", hasMatches);
+            result.put("hasAllocations", hasAllocations);
+            result.put("schedulingStatus", "ended");
+            result.put("status", hasMatches ? "success" : "failed");
             
         } catch (Exception e) {
             result.put("status", "failed");

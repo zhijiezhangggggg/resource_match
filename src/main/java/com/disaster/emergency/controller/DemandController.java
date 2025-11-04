@@ -319,4 +319,15 @@ public class DemandController {
             return Result.error(30001, "统计查询失败: " + e.getMessage());
         }
     }
+
+    @GetMapping("/statistics/matching-count")
+    @Operation(summary = "统计已匹配和待匹配需求数量", description = "基于匹配记录统计已匹配和待匹配需求的数量")
+    public Result<Map<String, Object>> getMatchingDemandCount() {
+        try {
+            Map<String, Object> statistics = demandService.getMatchingDemandCount();
+            return Result.success("统计查询成功", statistics);
+        } catch (Exception e) {
+            return Result.error(30001, "统计查询失败: " + e.getMessage());
+        }
+    }
 }

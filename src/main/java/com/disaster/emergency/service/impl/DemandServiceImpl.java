@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.disaster.emergency.entity.Demand;
 import com.disaster.emergency.entity.Disaster;
+import com.disaster.emergency.entity.MatchingRecord;
 import com.disaster.emergency.mapper.DemandMapper;
 import com.disaster.emergency.service.DemandService;
 import com.disaster.emergency.service.DisasterService;
+import com.disaster.emergency.service.MatchingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -17,12 +19,17 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> implements DemandService {
 
     @Autowired
     private DisasterService disasterService;
+    
+    @Autowired
+    private MatchingService matchingService;
 
     @Override
     public Demand submitDemand(Demand demand) {
@@ -216,5 +223,32 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
                    .orderByDesc("count");
         
         return listMaps(queryWrapper);
+    }
+
+    @Override
+    public Map<String, Object> getMatchingDemandCount() {
+        Map<String, Object> result = new HashMap<>();
+        
+        // 获取所有需求总数
+        long totalDemands = count();
+        
+        // 获取所有匹配记录，提取去重后的demandId集合
+        List<MatchingRecord> matchingRecords = matchingService.list();
+        Set<Long> matchedDemandIds = matchingRecords.stream()
+                .map(MatchingRecord::getDemandId)
+                .filter(demandId -> demandId != null)
+                .collect(Collectors.toSet());
+        
+        // 已匹配需求数量（去重后的demandId数量）
+        long matchedDemandCount = matchedDemandIds.size();
+        
+        // 待匹配需求数量（总需求数 - 已匹配需求数）
+        long pendingMatchDemandCount = totalDemands - matchedDemandCount;
+        
+        result.put("totalDemands", totalDemands);
+        result.put("matchedDemandCount", matchedDemandCount);
+        result.put("pendingMatchDemandCount", pendingMatchDemandCount);
+        
+        return result;
     }
 }

@@ -20,4 +20,12 @@ public interface DemandService extends IService<Demand> {
     List<Map<String, Object>> getDemandStatisticsByType(String startTime, String endTime);
     
     List<Map<String, Object>> getDemandStatisticsByUrgency(String startTime, String endTime);
+    
+    /**
+     * 统计已匹配和待匹配需求数量
+     * 已匹配需求：在MatchingRecord表中存在记录的需求（去重demandId）
+     * 待匹配需求：在Demand表中但不在MatchingRecord表中的需求
+     * @return 包含已匹配和待匹配需求数量的Map
+     */
+    Map<String, Object> getMatchingDemandCount();
 }
