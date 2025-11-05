@@ -33,6 +33,14 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
 
     @Override
     public Demand submitDemand(Demand demand) {
+        // 基础校验：必须关联有效的灾情ID，避免外键约束错误
+        if (demand.getDisasterId() == null || demand.getDisasterId() <= 0) {
+            throw new RuntimeException("灾情ID不能为空或无效");
+        }
+        Disaster disaster = disasterService.getById(demand.getDisasterId());
+        if (disaster == null) {
+            throw new RuntimeException("关联的灾情不存在或已被删除");
+        }
         // 提交需求时，如果ID已存在，说明这不是新增操作，应该拒绝
         if (demand.getId() != null && demand.getId() > 0) {
             // 检查数据库中是否已存在该ID

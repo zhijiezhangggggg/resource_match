@@ -2,6 +2,7 @@ package com.disaster.emergency.controller;
 
 import com.disaster.emergency.common.Result;
 import com.disaster.emergency.entity.Demand;
+import com.disaster.emergency.entity.Disaster;
 import com.disaster.emergency.entity.MatchingRecord;
 import com.disaster.emergency.entity.Resource;
 import com.disaster.emergency.entity.SchedulingRecord;
@@ -56,6 +57,9 @@ public class ResourceMatchingController {
     
     @Autowired
     private MatchingService matchingService;
+    
+    @Autowired
+    private DisasterService disasterService;
     
     /**
      * 处理灾情/需求报告
@@ -909,18 +913,33 @@ public class ResourceMatchingController {
         demand.setCreateTime(now);
         demand.setUpdateTime(now);
         
-        // 设置灾情ID（如果有的话）
+        // 关联灾情ID：若无有效 disaster_id，则自动创建最小灾情并关联
+        Long finalDisasterId = null;
         if (parseResult.containsKey("disaster_id")) {
             try {
-                Long disasterId = Long.valueOf(parseResult.get("disaster_id").toString());
-                demand.setDisasterId(disasterId != null && disasterId > 0 ? disasterId : 1L);
-            } catch (Exception e) {
-                demand.setDisasterId(1L);
+                Long parsedId = Long.valueOf(parseResult.get("disaster_id").toString());
+                if (parsedId != null && parsedId > 0 && disasterService.getById(parsedId) != null) {
+                    finalDisasterId = parsedId;
+                }
+            } catch (Exception ignore) {
+                // fallthrough to create new disaster
             }
-        } else {
-            // 默认关联到第一个灾情记录，实际应用中应该根据业务逻辑确定
-            demand.setDisasterId(1L);
         }
+        if (finalDisasterId == null) {
+            Disaster minimal = new Disaster();
+            String disasterType = (String) parseResult.getOrDefault("disaster_type", "未知");
+            String severity = (String) parseResult.getOrDefault("severity", "一般");
+            minimal.setDisasterType(disasterType != null && !disasterType.trim().isEmpty() ? disasterType : "未知");
+            minimal.setSeverity(severity != null && !severity.trim().isEmpty() ? severity : "一般");
+            minimal.setOccurTime(now);
+            minimal.setProvince(demand.getProvince());
+            minimal.setCity(demand.getCity());
+            minimal.setDistrict(demand.getDistrict());
+            minimal.setStatus("active");
+            Disaster created = disasterService.reportDisaster(minimal);
+            finalDisasterId = created.getId();
+        }
+        demand.setDisasterId(finalDisasterId);
         
         return demand;
     }
