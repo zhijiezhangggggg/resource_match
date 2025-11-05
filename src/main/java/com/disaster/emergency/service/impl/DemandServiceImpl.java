@@ -5,11 +5,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.disaster.emergency.entity.Demand;
 import com.disaster.emergency.entity.Disaster;
-import com.disaster.emergency.entity.MatchingRecord;
 import com.disaster.emergency.mapper.DemandMapper;
 import com.disaster.emergency.service.DemandService;
 import com.disaster.emergency.service.DisasterService;
-import com.disaster.emergency.service.MatchingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -19,17 +17,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> implements DemandService {
 
     @Autowired
     private DisasterService disasterService;
-    
-    @Autowired
-    private MatchingService matchingService;
 
     @Override
     public Demand submitDemand(Demand demand) {
@@ -240,22 +233,19 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
         // 获取所有需求总数
         long totalDemands = count();
         
-        // 获取所有匹配记录，提取去重后的demandId集合
-        List<MatchingRecord> matchingRecords = matchingService.list();
-        Set<Long> matchedDemandIds = matchingRecords.stream()
-                .map(MatchingRecord::getDemandId)
-                .filter(demandId -> demandId != null)
-                .collect(Collectors.toSet());
+        // 成功分配状态：matched、allocated、completed、satisfied
+        QueryWrapper<Demand> allocatedWrapper = new QueryWrapper<>();
+        allocatedWrapper.in("status", "matched", "allocated", "completed", "satisfied");
+        long allocatedDemandCount = count(allocatedWrapper);
         
-        // 已匹配需求数量（去重后的demandId数量）
-        long matchedDemandCount = matchedDemandIds.size();
-        
-        // 待匹配需求数量（总需求数 - 已匹配需求数）
-        long pendingMatchDemandCount = totalDemands - matchedDemandCount;
+        // 待处理状态：pending、match_failed、processing
+        QueryWrapper<Demand> pendingWrapper = new QueryWrapper<>();
+        pendingWrapper.in("status", "pending", "match_failed", "processing");
+        long pendingDemandCount = count(pendingWrapper);
         
         result.put("totalDemands", totalDemands);
-        result.put("matchedDemandCount", matchedDemandCount);
-        result.put("pendingMatchDemandCount", pendingMatchDemandCount);
+        result.put("allocatedDemandCount", allocatedDemandCount);  // 成功分配数量
+        result.put("pendingDemandCount", pendingDemandCount);     // 待处理数量
         
         return result;
     }

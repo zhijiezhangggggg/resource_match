@@ -321,7 +321,7 @@ public class DemandController {
     }
 
     @GetMapping("/statistics/matching-count")
-    @Operation(summary = "统计已匹配和待匹配需求数量", description = "基于匹配记录统计已匹配和待匹配需求的数量")
+    @Operation(summary = "统计成功分配和待处理需求数量", description = "基于需求状态统计：成功分配（matched、allocated、completed、satisfied），待处理（pending、match_failed、processing）")
     public Result<Map<String, Object>> getMatchingDemandCount() {
         try {
             Map<String, Object> statistics = demandService.getMatchingDemandCount();
