@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -83,6 +85,19 @@ public class ResourceMatchingController {
             String text = (String) request.get("text");
             String location = (String) request.get("location");
             String reporter = (String) request.get("reporter");
+            Double latitude = null;
+            Double longitude = null;
+            Long disasterId = null;
+            
+            if (request.get("latitude") != null) {
+                try { latitude = Double.valueOf(request.get("latitude").toString()); } catch (Exception ignore) {}
+            }
+            if (request.get("longitude") != null) {
+                try { longitude = Double.valueOf(request.get("longitude").toString()); } catch (Exception ignore) {}
+            }
+            if (request.get("disasterId") != null) {
+                try { disasterId = Long.valueOf(request.get("disasterId").toString()); } catch (Exception ignore) {}
+            }
             
             if (reportType == null || text == null || text.trim().isEmpty()) {
                 return Result.error(20001, "报告类型和文本内容不能为空");
@@ -98,9 +113,9 @@ public class ResourceMatchingController {
             Map<String, Object> graphResult = processKnowledgeGraph(reportType, parseResult, location, reporter);
             result.put("graphResult", graphResult);
             
-            // 3. 如果是需求报告，进行资源匹配
+            // 3. 如果是需求报告，进行资源匹配（并保存经纬度）
             if ("demand".equals(reportType)) {
-                Map<String, Object> matchingResult = performResourceMatching(parseResult, location);
+                Map<String, Object> matchingResult = performResourceMatching(parseResult, location, latitude, longitude, disasterId);
                 result.put("matchingResult", matchingResult);
             }
             
@@ -422,12 +437,17 @@ public class ResourceMatchingController {
     /**
      * 执行资源匹配
      */
-    private Map<String, Object> performResourceMatching(Map<String, Object> parseResult, String location) {
+    private Map<String, Object> performResourceMatching(Map<String, Object> parseResult, String location, Double latitude, Double longitude, Long disasterId) {
         Map<String, Object> result = new HashMap<>();
         
         try {
             // 创建真实需求对象并保存到数据库
-            Demand demand = createRealDemand(parseResult, location);
+            Demand demand = createRealDemand(parseResult, location, latitude, longitude, disasterId);
+            if (demand == null) {
+                result.put("status", "failed");
+                result.put("error", "无法找到关联的灾情，请先选择或创建灾情");
+                return result;
+            }
             demand = demandService.submitDemand(demand);
             Long demandId = demand.getId();
             
@@ -840,8 +860,14 @@ public class ResourceMatchingController {
     
     /**
      * 创建真实需求对象
+     * @param parseResult 解析结果
+     * @param location 位置信息
+     * @param latitude 纬度
+     * @param longitude 经度
+     * @param disasterId 前端传入的灾情ID（可选）
+     * @return 需求对象，如果无法找到关联的灾情则返回null
      */
-    private Demand createRealDemand(Map<String, Object> parseResult, String location) {
+    private Demand createRealDemand(Map<String, Object> parseResult, String location, Double latitude, Double longitude, Long disasterId) {
         Demand demand = new Demand();
         
         // 设置需求类型
@@ -861,29 +887,26 @@ public class ResourceMatchingController {
         demand.setUrgency(urgency != null && !urgency.trim().isEmpty() ? urgency : "中");
         
         // 解析location到province, city, district
+        String province = null;
+        String city = null;
+        String district = null;
         if (location != null && !location.trim().isEmpty()) {
             String[] locationParts = location.split("省|市|区|县");
             if (locationParts.length > 0) {
-                demand.setProvince(locationParts[0] + "省");
-            } else {
-                demand.setProvince("未知");
+                province = locationParts[0] + "省";
             }
             if (locationParts.length > 1) {
-                demand.setCity(locationParts[1] + "市");
-            } else {
-                demand.setCity("未知");
+                city = locationParts[1] + "市";
             }
             if (locationParts.length > 2) {
-                demand.setDistrict(locationParts[2] + "区");
-            } else {
-                demand.setDistrict("未知");
+                district = locationParts[2] + "区";
             }
-        } else {
-            // 默认位置
-            demand.setProvince("未知");
-            demand.setCity("未知");
-            demand.setDistrict("未知");
         }
+        
+        // 设置位置信息
+        demand.setProvince(province != null && !province.trim().isEmpty() ? province : "未知");
+        demand.setCity(city != null && !city.trim().isEmpty() ? city : "未知");
+        demand.setDistrict(district != null && !district.trim().isEmpty() ? district : "未知");
         
         // 确保所有必填字段都有值
         if (demand.getProvince() == null || demand.getProvince().trim().isEmpty()) {
@@ -905,6 +928,14 @@ public class ResourceMatchingController {
         }
         demand.setDescription(description.toString());
         
+        // 经纬度
+        if (latitude != null && latitude >= -90.0 && latitude <= 90.0) {
+            demand.setLatitude(latitude);
+        }
+        if (longitude != null && longitude >= -180.0 && longitude <= 180.0) {
+            demand.setLongitude(longitude);
+        }
+        
         // 设置初始状态
         demand.setStatus("pending");
         
@@ -913,35 +944,114 @@ public class ResourceMatchingController {
         demand.setCreateTime(now);
         demand.setUpdateTime(now);
         
-        // 关联灾情ID：若无有效 disaster_id，则自动创建最小灾情并关联
+        // 关联灾情ID：优先使用前端传入的disasterId，否则根据位置和灾害类型查找已有灾情
         Long finalDisasterId = null;
-        if (parseResult.containsKey("disaster_id")) {
-            try {
-                Long parsedId = Long.valueOf(parseResult.get("disaster_id").toString());
-                if (parsedId != null && parsedId > 0 && disasterService.getById(parsedId) != null) {
-                    finalDisasterId = parsedId;
-                }
-            } catch (Exception ignore) {
-                // fallthrough to create new disaster
+        
+        // 1. 优先使用前端传入的disasterId
+        if (disasterId != null && disasterId > 0) {
+            Disaster specifiedDisaster = disasterService.getById(disasterId);
+            if (specifiedDisaster != null) {
+                finalDisasterId = disasterId;
             }
         }
-        if (finalDisasterId == null) {
-            Disaster minimal = new Disaster();
-            String disasterType = (String) parseResult.getOrDefault("disaster_type", "未知");
-            String severity = (String) parseResult.getOrDefault("severity", "一般");
-            minimal.setDisasterType(disasterType != null && !disasterType.trim().isEmpty() ? disasterType : "未知");
-            minimal.setSeverity(severity != null && !severity.trim().isEmpty() ? severity : "一般");
-            minimal.setOccurTime(now);
-            minimal.setProvince(demand.getProvince());
-            minimal.setCity(demand.getCity());
-            minimal.setDistrict(demand.getDistrict());
-            minimal.setStatus("active");
-            Disaster created = disasterService.reportDisaster(minimal);
-            finalDisasterId = created.getId();
+        
+        // 2. 如果前端没有传入或传入的无效，尝试从parseResult中获取
+        if (finalDisasterId == null && parseResult.containsKey("disaster_id")) {
+            try {
+                Long parsedId = Long.valueOf(parseResult.get("disaster_id").toString());
+                if (parsedId != null && parsedId > 0) {
+                    Disaster parsedDisaster = disasterService.getById(parsedId);
+                    if (parsedDisaster != null) {
+                        finalDisasterId = parsedId;
+                    }
+                }
+            } catch (Exception ignore) {
+                // 忽略解析错误
+            }
         }
+        
+        // 3. 如果还没有找到，根据位置和灾害类型查找已有的灾情
+        if (finalDisasterId == null) {
+            String disasterType = (String) parseResult.getOrDefault("disaster_type", null);
+            finalDisasterId = findExistingDisaster(province, city, district, disasterType);
+        }
+        
+        // 4. 如果仍然找不到，返回null，让调用方处理
+        if (finalDisasterId == null) {
+            return null;
+        }
+        
         demand.setDisasterId(finalDisasterId);
         
         return demand;
+    }
+    
+    /**
+     * 根据位置和灾害类型查找已有的灾情
+     * @param province 省份
+     * @param city 城市
+     * @param district 区县
+     * @param disasterType 灾害类型
+     * @return 找到的灾情ID，如果找不到则返回null
+     */
+    private Long findExistingDisaster(String province, String city, String district, String disasterType) {
+        try {
+            // 使用QueryWrapper查询
+            QueryWrapper<Disaster> queryWrapper = new QueryWrapper<>();
+            
+            // 优先匹配精确位置
+            if (province != null && !province.trim().isEmpty() && !province.equals("未知")) {
+                queryWrapper.eq("province", province);
+            }
+            if (city != null && !city.trim().isEmpty() && !city.equals("未知")) {
+                queryWrapper.eq("city", city);
+            }
+            if (district != null && !district.trim().isEmpty() && !district.equals("未知")) {
+                queryWrapper.eq("district", district);
+            }
+            
+            // 如果指定了灾害类型，也作为查询条件
+            if (disasterType != null && !disasterType.trim().isEmpty() && !disasterType.equals("未知")) {
+                queryWrapper.eq("disaster_type", disasterType);
+            }
+            
+            // 只查询活跃状态的灾情
+            queryWrapper.eq("status", "active");
+            
+            // 按创建时间倒序，取最新的
+            queryWrapper.orderByDesc("create_time");
+            queryWrapper.last("LIMIT 1");
+            
+            List<Disaster> disasters = disasterService.list(queryWrapper);
+            if (disasters != null && !disasters.isEmpty()) {
+                return disasters.get(0).getId();
+            }
+            
+            // 如果精确匹配没找到，放宽条件：只匹配省份和城市
+            if (province != null && !province.trim().isEmpty() && !province.equals("未知") &&
+                city != null && !city.trim().isEmpty() && !city.equals("未知")) {
+                queryWrapper = new QueryWrapper<>();
+                queryWrapper.eq("province", province);
+                queryWrapper.eq("city", city);
+                if (disasterType != null && !disasterType.trim().isEmpty() && !disasterType.equals("未知")) {
+                    queryWrapper.eq("disaster_type", disasterType);
+                }
+                queryWrapper.eq("status", "active");
+                queryWrapper.orderByDesc("create_time");
+                queryWrapper.last("LIMIT 1");
+                
+                disasters = disasterService.list(queryWrapper);
+                if (disasters != null && !disasters.isEmpty()) {
+                    return disasters.get(0).getId();
+                }
+            }
+            
+        } catch (Exception e) {
+            System.err.println("查找已有灾情时发生异常: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return null;
     }
     
     /**
