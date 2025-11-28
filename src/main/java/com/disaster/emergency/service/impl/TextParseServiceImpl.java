@@ -125,11 +125,50 @@ public class TextParseServiceImpl implements TextParseService {
             result.put("unit", quantityMatcher.group(2));
         }
         
-        // 提取地点
-        Pattern locationPattern = Pattern.compile("([^，,。.]+?[市县区])");
-        Matcher locationMatcher = locationPattern.matcher(text);
-        if (locationMatcher.find()) {
-            result.put("location", locationMatcher.group(1));
+        // 提取地点 - 匹配完整的地址包括省市区县
+        // 使用多个模式按优先级匹配，选择最长的匹配结果
+        String fullLocation = null;
+        int maxLength = 0;
+        
+        // 模式1: 省+市+区/县/市（完整地址）
+        Pattern pattern1 = Pattern.compile("([^，,。.]+?省[^，,。.]+?市[^，,。.]+?[市县区])");
+        Matcher matcher1 = pattern1.matcher(text);
+        while (matcher1.find()) {
+            String match = matcher1.group(1);
+            if (match.length() > maxLength) {
+                fullLocation = match;
+                maxLength = match.length();
+            }
+        }
+        
+        // 模式2: 市+区/县/市（无省的情况）
+        if (maxLength < 6) { // 如果完整地址匹配长度较短，尝试其他模式
+            Pattern pattern2 = Pattern.compile("([^，,。.]+?市[^，,。.]+?[市县区])");
+            Matcher matcher2 = pattern2.matcher(text);
+            while (matcher2.find()) {
+                String match = matcher2.group(1);
+                if (match.length() > maxLength) {
+                    fullLocation = match;
+                    maxLength = match.length();
+                }
+            }
+        }
+        
+        // 模式3: 单个市/县/区（备选）
+        if (maxLength < 4) {
+            Pattern pattern3 = Pattern.compile("([^，,。.]+?[市县区])");
+            Matcher matcher3 = pattern3.matcher(text);
+            while (matcher3.find()) {
+                String match = matcher3.group(1);
+                if (match.length() > maxLength) {
+                    fullLocation = match;
+                    maxLength = match.length();
+                }
+            }
+        }
+        
+        if (fullLocation != null) {
+            result.put("location", fullLocation);
         }
         
         // 提取时间
