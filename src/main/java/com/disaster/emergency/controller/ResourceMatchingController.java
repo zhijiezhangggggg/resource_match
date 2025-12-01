@@ -185,11 +185,9 @@ public class ResourceMatchingController {
                 updateDemandStatus(demandId, "match_failed");
             }
             
-            // 仅当有调度分配时才保存调度记录并更新需求状态
+            // 仅当有调度分配时才保存调度记录，具体状态在保存逻辑中根据分配数量判断
             if (hasAllocations) {
                 saveSchedulingRecords(demandId, schedulingResult);
-                // 有调度分配，更新为allocated
-                updateDemandStatus(demandId, "allocated");
             }
             
             Map<String, Object> result = new HashMap<>();
@@ -474,10 +472,9 @@ public class ResourceMatchingController {
                 updateDemandStatus(demandId, "match_failed");
             }
             
-            // 仅当有调度分配时才保存调度记录并更新需求状态
+            // 仅当有调度分配时才保存调度记录，具体状态在保存逻辑中根据分配数量判断
             if (hasAllocations) {
                 saveSchedulingRecords(demandId, schedulingResult);
-                updateDemandStatus(demandId, "allocated");
             }
             
             result.put("demandId", demandId);
@@ -1117,9 +1114,17 @@ public class ResourceMatchingController {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> allocations = (List<Map<String, Object>>) schedulingResult.get("allocations");
             
-            System.out.println("开始保存调度记录，需求ID: " + demandId + ", 分配数量: " + (allocations != null ? allocations.size() : 0));
+            System.out.println("开始保存调度记录，需求ID: " + demandId + ", 分配条目数量: " + (allocations != null ? allocations.size() : 0));
             
             if (allocations != null && !allocations.isEmpty()) {
+                // 获取需求信息，用于确定目标数量
+                Demand demand = demandService.getById(demandId);
+                int demandQuantity = (demand != null && demand.getQuantity() != null && demand.getQuantity() > 0)
+                        ? demand.getQuantity()
+                        : 1;
+                
+                int totalAllocated = 0;
+                
                 for (Map<String, Object> allocation : allocations) {
                     SchedulingRecord schedulingRecord = new SchedulingRecord();
                     schedulingRecord.setDemandId(demandId);
@@ -1128,15 +1133,22 @@ public class ResourceMatchingController {
                     schedulingRecord.setResourceId(resourceId);
                     System.out.println("处理调度记录，资源ID: " + resourceId);
                     
-                    // 获取需求信息以确定分配数量
-                    Demand demand = demandService.getById(demandId);
-                    if (demand != null) {
-                        schedulingRecord.setAllocatedQuantity(demand.getQuantity());
-                        System.out.println("分配数量: " + demand.getQuantity());
-                    } else {
-                        schedulingRecord.setAllocatedQuantity(1); // 默认数量
-                        System.out.println("使用默认分配数量: 1");
+                    // 根据资源可用数量和剩余需求量确定本次分配数量
+                    Resource resource = resourceService.getById(resourceId);
+                    int resourceAvailable = (resource != null && resource.getAvailableQuantity() != null)
+                            ? resource.getAvailableQuantity()
+                            : 0;
+                    int remainingDemand = demandQuantity - totalAllocated;
+                    int allocatedQuantity = Math.max(0, Math.min(remainingDemand, resourceAvailable));
+                    
+                    // 如果没有可分配数量，则跳过该记录
+                    if (allocatedQuantity <= 0) {
+                        System.out.println("资源ID " + resourceId + " 可用数量不足，跳过分配");
+                        continue;
                     }
+                    
+                    schedulingRecord.setAllocatedQuantity(allocatedQuantity);
+                    System.out.println("分配数量: " + allocatedQuantity + " (需求剩余: " + remainingDemand + ", 资源可用: " + resourceAvailable + ")");
                     
                     // 系统自动调度
                     schedulingRecord.setSchedulerId(1L);
@@ -1156,11 +1168,22 @@ public class ResourceMatchingController {
                         // 更新资源数量
                         updateResourceQuantity(schedulingRecord.getResourceId(), schedulingRecord.getAllocatedQuantity());
                         
-                        // 调度记录保存成功后，更新需求状态为已分配
-                        updateDemandStatus(demandId, "allocated");
+                        totalAllocated += allocatedQuantity;
                     } else {
                         System.err.println("调度记录保存失败，资源ID: " + resourceId);
                     }
+                }
+                
+                // 根据总分配数量与需求数量的关系，更新需求状态
+                if (totalAllocated >= demandQuantity) {
+                    // 需求已完全满足
+                    updateDemandStatus(demandId, "allocated");
+                } else if (totalAllocated > 0) {
+                    // 只满足了部分需求
+                    updateDemandStatus(demandId, "processing");
+                } else {
+                    // 没有成功分配任何资源，保持原状态（通常是 matched）
+                    System.out.println("需求ID " + demandId + " 未成功分配任何资源，保持原状态");
                 }
             } else {
                 System.out.println("没有分配记录需要保存");

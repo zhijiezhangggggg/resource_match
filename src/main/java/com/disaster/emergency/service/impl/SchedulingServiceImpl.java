@@ -216,7 +216,13 @@ public class SchedulingServiceImpl implements SchedulingService {
         double bestSimilarity = 0.0;
         
         for (Resource resource : resources) {
+            // 已经被其它需求占用的资源不再重复使用
             if (usedResources.contains(resource.getId())) {
+                continue;
+            }
+            
+            // 可用数量为空或<=0 的资源视为不可用，跳过
+            if (resource.getAvailableQuantity() == null || resource.getAvailableQuantity() <= 0) {
                 continue;
             }
             
