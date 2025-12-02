@@ -168,12 +168,22 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             throw new RuntimeException("需求不存在");
         }
         
-        // 3. 验证可用数量是否足够
+        // 3. 强制类型匹配校验：资源类型必须与需求类型完全一致
+        String demandType = demand.getDemandType();
+        if (demandType != null && !demandType.trim().isEmpty()) {
+            String resourceType = resource.getResourceType();
+            if (resourceType == null || !resourceType.equals(demandType)) {
+                throw new RuntimeException("资源类型不匹配：需求类型为 \"" + demandType + 
+                                         "\"，但资源类型为 \"" + resourceType + "\"。只能分配相同类型的资源。");
+            }
+        }
+        
+        // 4. 验证可用数量是否足够
         if (resource.getAvailableQuantity() < allocatedQuantity) {
             throw new RuntimeException("可用数量不足，当前可用数量：" + resource.getAvailableQuantity());
         }
         
-        // 4. 更新资源可用数量
+        // 5. 更新资源可用数量
         int newAvailableQuantity = resource.getAvailableQuantity() - allocatedQuantity;
         UpdateWrapper<Resource> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", resourceId)
@@ -189,7 +199,7 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             throw new RuntimeException("资源数量更新失败");
         }
         
-        // 5. 创建资源分配记录
+        // 6. 创建资源分配记录
         ResourceAllocation allocation = new ResourceAllocation();
         allocation.setResourceId(resourceId);
         allocation.setDemandId(demandId);
@@ -208,7 +218,7 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             throw new RuntimeException("资源分配记录创建失败");
         }
         
-        // 6. 更新需求状态（如果需求被完全满足）
+        // 7. 更新需求状态（如果需求被完全满足）
         if (demand.getQuantity() <= allocatedQuantity) {
             UpdateWrapper<Demand> demandUpdateWrapper = new UpdateWrapper<>();
             demandUpdateWrapper.eq("id", demandId)
@@ -217,7 +227,7 @@ public class ResourceServiceImpl extends ServiceImpl<ResourceMapper, Resource> i
             demandMapper.update(null, demandUpdateWrapper);
         }
         
-        // 7. 建立知识图谱关联
+        // 8. 建立知识图谱关联
         System.out.println("开始建立知识图谱关联...");
         try {
             // 获取或创建资源节点

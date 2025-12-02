@@ -6,6 +6,7 @@ import com.disaster.emergency.entity.Disaster;
 import com.disaster.emergency.entity.MatchingRecord;
 import com.disaster.emergency.entity.Resource;
 import com.disaster.emergency.entity.SchedulingRecord;
+import com.disaster.emergency.mapper.SchedulingRecordMapper;
 import com.disaster.emergency.service.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -62,6 +63,9 @@ public class ResourceMatchingController {
     
     @Autowired
     private DisasterService disasterService;
+    
+    @Autowired
+    private SchedulingRecordMapper schedulingRecordMapper;
     
     /**
      * 处理灾情/需求报告
@@ -1135,7 +1139,23 @@ public class ResourceMatchingController {
                     
                     // 根据资源可用数量和剩余需求量确定本次分配数量
                     Resource resource = resourceService.getById(resourceId);
-                    int resourceAvailable = (resource != null && resource.getAvailableQuantity() != null)
+                    if (resource == null) {
+                        System.err.println("资源ID " + resourceId + " 不存在，跳过分配");
+                        continue;
+                    }
+                    
+                    // 强制类型匹配校验：资源类型必须与需求类型完全一致
+                    String demandType = demand.getDemandType();
+                    if (demandType != null && !demandType.trim().isEmpty()) {
+                        String resourceType = resource.getResourceType();
+                        if (resourceType == null || !resourceType.equals(demandType)) {
+                            System.err.println("资源ID " + resourceId + " 类型不匹配（需求类型: " + demandType + 
+                                             ", 资源类型: " + resourceType + "），跳过分配");
+                            continue;
+                        }
+                    }
+                    
+                    int resourceAvailable = (resource.getAvailableQuantity() != null)
                             ? resource.getAvailableQuantity()
                             : 0;
                     int remainingDemand = demandQuantity - totalAllocated;
@@ -1174,13 +1194,43 @@ public class ResourceMatchingController {
                     }
                 }
                 
-                // 根据总分配数量与需求数量的关系，更新需求状态
-                if (totalAllocated >= demandQuantity) {
-                    // 需求已完全满足
+                // 查询该需求的所有历史分配记录，计算累计已分配总量（只计算类型匹配的资源）
+                QueryWrapper<SchedulingRecord> historyQuery = new QueryWrapper<>();
+                historyQuery.eq("demand_id", demandId);
+                List<SchedulingRecord> historyRecords = schedulingRecordMapper.selectList(historyQuery);
+                
+                // 获取需求类型，用于过滤类型不匹配的分配记录
+                String demandType = demand.getDemandType();
+                int totalHistoryAllocated = 0;
+                
+                for (SchedulingRecord record : historyRecords) {
+                    // 只计算类型匹配的资源分配
+                    if (demandType != null && !demandType.trim().isEmpty()) {
+                        Resource recordResource = resourceService.getById(record.getResourceId());
+                        if (recordResource != null) {
+                            String resourceType = recordResource.getResourceType();
+                            // 类型不匹配的记录不计入累计分配
+                            if (resourceType == null || !resourceType.equals(demandType)) {
+                                System.out.println("跳过类型不匹配的分配记录：资源ID " + record.getResourceId() + 
+                                                 " (需求类型: " + demandType + ", 资源类型: " + resourceType + ")");
+                                continue;
+                            }
+                        }
+                    }
+                    totalHistoryAllocated += (record.getAllocatedQuantity() != null ? record.getAllocatedQuantity() : 0);
+                }
+                
+                System.out.println("需求ID " + demandId + " 累计已分配总量: " + totalHistoryAllocated + ", 需求数量: " + demandQuantity);
+                
+                // 根据累计分配总量与需求数量的关系，更新需求状态
+                if (totalHistoryAllocated >= demandQuantity) {
+                    // 需求已完全满足（累计分配总量已满足需求）
                     updateDemandStatus(demandId, "allocated");
-                } else if (totalAllocated > 0) {
+                    System.out.println("需求ID " + demandId + " 累计分配已满足需求，状态更新为 allocated");
+                } else if (totalHistoryAllocated > 0) {
                     // 只满足了部分需求
                     updateDemandStatus(demandId, "processing");
+                    System.out.println("需求ID " + demandId + " 累计分配部分满足，状态更新为 processing");
                 } else {
                     // 没有成功分配任何资源，保持原状态（通常是 matched）
                     System.out.println("需求ID " + demandId + " 未成功分配任何资源，保持原状态");

@@ -10,7 +10,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.disaster.emergency.entity.Resource;
+import com.disaster.emergency.entity.SchedulingRecord;
+import com.disaster.emergency.mapper.SchedulingRecordMapper;
+import com.disaster.emergency.service.ResourceService;
+
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +30,12 @@ public class DemandController {
 
     @Autowired
     private DemandService demandService;
+    
+    @Autowired
+    private SchedulingRecordMapper schedulingRecordMapper;
+    
+    @Autowired
+    private ResourceService resourceService;
 
     @PostMapping("/submit")
     @Operation(summary = "提交需求", description = "提交新的救援需求")
@@ -87,12 +100,48 @@ public class DemandController {
         
         try {
             Page<Demand> demandPage = demandService.getDemandList(page, size, disasterId, demandType, urgency, status, province, city);
+            
+            // 为每个需求计算剩余需求量
+            List<Map<String, Object>> recordsWithRemaining = new ArrayList<>();
+            if (demandPage.getRecords() != null) {
+                for (Demand demand : demandPage.getRecords()) {
+                    Map<String, Object> demandMap = new HashMap<>();
+                    // 复制需求基本信息
+                    demandMap.put("id", demand.getId());
+                    demandMap.put("disasterId", demand.getDisasterId());
+                    demandMap.put("demandType", demand.getDemandType());
+                    demandMap.put("quantity", demand.getQuantity());
+                    demandMap.put("unit", demand.getUnit());
+                    demandMap.put("urgency", demand.getUrgency());
+                    demandMap.put("province", demand.getProvince());
+                    demandMap.put("city", demand.getCity());
+                    demandMap.put("district", demand.getDistrict());
+                    demandMap.put("latitude", demand.getLatitude());
+                    demandMap.put("longitude", demand.getLongitude());
+                    demandMap.put("description", demand.getDescription());
+                    demandMap.put("status", demand.getStatus());
+                    demandMap.put("submitterName", demand.getSubmitterName());
+                    demandMap.put("createTime", demand.getCreateTime());
+                    demandMap.put("updateTime", demand.getUpdateTime());
+                    
+                    // 计算剩余需求量
+                    int demandQuantity = demand.getQuantity() != null ? demand.getQuantity() : 0;
+                    int totalAllocated = calculateAllocatedQuantity(demand.getId(), demand.getDemandType());
+                    int remainingQuantity = Math.max(0, demandQuantity - totalAllocated);
+                    
+                    demandMap.put("totalAllocated", totalAllocated); // 已分配数量
+                    demandMap.put("remainingQuantity", remainingQuantity); // 剩余需求量
+                    
+                    recordsWithRemaining.add(demandMap);
+                }
+            }
+            
             Map<String, Object> result = new HashMap<>();
             result.put("total", demandPage.getTotal());
             result.put("pages", demandPage.getPages());
             result.put("current", demandPage.getCurrent());
             result.put("size", demandPage.getSize());
-            result.put("records", demandPage.getRecords());
+            result.put("records", recordsWithRemaining);
             
             return Result.success("查询成功", result);
         } catch (Exception e) {
@@ -328,6 +377,62 @@ public class DemandController {
             return Result.success("统计查询成功", statistics);
         } catch (Exception e) {
             return Result.error(30001, "统计查询失败: " + e.getMessage());
+        }
+    }
+    
+    @PostMapping("/{id}/check-status")
+    @Operation(summary = "检查并更新需求状态", description = "根据已分配资源总量检查需求状态，如果累计分配已满足需求则更新为allocated")
+    public Result<Map<String, Object>> checkAndUpdateDemandStatus(@PathVariable Long id) {
+        try {
+            if (id == null || id <= 0) {
+                return Result.error(30002, "需求ID无效");
+            }
+            
+            Map<String, Object> result = demandService.checkAndUpdateDemandStatus(id);
+            return Result.success((String) result.get("message"), result);
+        } catch (Exception e) {
+            return Result.error(30001, "检查失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 计算需求的已分配数量（只计算类型匹配的资源）
+     * @param demandId 需求ID
+     * @param demandType 需求类型
+     * @return 已分配数量
+     */
+    private int calculateAllocatedQuantity(Long demandId, String demandType) {
+        try {
+            // 查询该需求的所有分配记录
+            QueryWrapper<SchedulingRecord> query = new QueryWrapper<>();
+            query.eq("demand_id", demandId);
+            List<SchedulingRecord> records = schedulingRecordMapper.selectList(query);
+            
+            int totalAllocated = 0;
+            
+            // 只计算类型匹配的资源分配
+            if (demandType != null && !demandType.trim().isEmpty()) {
+                for (SchedulingRecord record : records) {
+                    Resource resource = resourceService.getById(record.getResourceId());
+                    if (resource != null) {
+                        String resourceType = resource.getResourceType();
+                        // 类型匹配的记录才计入累计分配
+                        if (resourceType != null && resourceType.equals(demandType)) {
+                            totalAllocated += (record.getAllocatedQuantity() != null ? record.getAllocatedQuantity() : 0);
+                        }
+                    }
+                }
+            } else {
+                // 如果需求类型为空，则计算所有分配记录
+                for (SchedulingRecord record : records) {
+                    totalAllocated += (record.getAllocatedQuantity() != null ? record.getAllocatedQuantity() : 0);
+                }
+            }
+            
+            return totalAllocated;
+        } catch (Exception e) {
+            System.err.println("计算已分配数量失败: " + e.getMessage());
+            return 0;
         }
     }
 }

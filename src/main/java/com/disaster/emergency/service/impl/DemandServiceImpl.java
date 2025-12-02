@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.disaster.emergency.entity.Demand;
 import com.disaster.emergency.entity.Disaster;
+import com.disaster.emergency.entity.Resource;
+import com.disaster.emergency.entity.SchedulingRecord;
 import com.disaster.emergency.mapper.DemandMapper;
+import com.disaster.emergency.mapper.SchedulingRecordMapper;
 import com.disaster.emergency.service.DemandService;
 import com.disaster.emergency.service.DisasterService;
+import com.disaster.emergency.service.ResourceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -23,6 +27,12 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
 
     @Autowired
     private DisasterService disasterService;
+    
+    @Autowired
+    private SchedulingRecordMapper schedulingRecordMapper;
+    
+    @Autowired
+    private ResourceService resourceService;
 
     @Override
     public Demand submitDemand(Demand demand) {
@@ -246,6 +256,79 @@ public class DemandServiceImpl extends ServiceImpl<DemandMapper, Demand> impleme
         result.put("totalDemands", totalDemands);
         result.put("allocatedDemandCount", allocatedDemandCount);  // 成功分配数量
         result.put("pendingDemandCount", pendingDemandCount);     // 待处理数量
+        
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> checkAndUpdateDemandStatus(Long demandId) {
+        Map<String, Object> result = new HashMap<>();
+        
+        Demand demand = getById(demandId);
+        if (demand == null) {
+            result.put("success", false);
+            result.put("message", "需求不存在");
+            return result;
+        }
+        
+        // 如果需求已经是allocated状态，无需检查
+        if ("allocated".equals(demand.getStatus())) {
+            result.put("success", true);
+            result.put("message", "需求已完全满足，无需更新");
+            result.put("status", demand.getStatus());
+            result.put("totalAllocated", 0);
+            result.put("demandQuantity", demand.getQuantity());
+            return result;
+        }
+        
+        // 查询该需求的所有分配记录
+        QueryWrapper<SchedulingRecord> query = new QueryWrapper<>();
+        query.eq("demand_id", demandId);
+        List<SchedulingRecord> records = schedulingRecordMapper.selectList(query);
+        
+        // 获取需求类型，用于过滤类型不匹配的分配记录
+        String demandType = demand.getDemandType();
+        int totalAllocated = 0;
+        
+        for (SchedulingRecord record : records) {
+            // 只计算类型匹配的资源分配
+            if (demandType != null && !demandType.trim().isEmpty()) {
+                Resource recordResource = resourceService.getById(record.getResourceId());
+                if (recordResource != null) {
+                    String resourceType = recordResource.getResourceType();
+                    // 类型不匹配的记录不计入累计分配
+                    if (resourceType == null || !resourceType.equals(demandType)) {
+                        continue;
+                    }
+                }
+            }
+            totalAllocated += (record.getAllocatedQuantity() != null ? record.getAllocatedQuantity() : 0);
+        }
+        
+        int demandQuantity = demand.getQuantity() != null ? demand.getQuantity() : 0;
+        
+        result.put("totalAllocated", totalAllocated);
+        result.put("demandQuantity", demandQuantity);
+        
+        if (totalAllocated >= demandQuantity && demandQuantity > 0) {
+            // 累计分配已满足需求，更新状态
+            boolean success = updateDemandStatus(demandId, "allocated");
+            result.put("success", success);
+            result.put("message", "需求状态已更新为已完全满足");
+            result.put("status", "allocated");
+        } else if (totalAllocated > 0) {
+            // 有部分分配但未完全满足
+            if (!"processing".equals(demand.getStatus())) {
+                updateDemandStatus(demandId, "processing");
+            }
+            result.put("success", true);
+            result.put("message", "需求部分满足");
+            result.put("status", "processing");
+        } else {
+            result.put("success", true);
+            result.put("message", "需求尚未分配资源");
+            result.put("status", demand.getStatus());
+        }
         
         return result;
     }

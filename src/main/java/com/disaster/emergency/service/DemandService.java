@@ -28,4 +28,12 @@ public interface DemandService extends IService<Demand> {
      * @return 包含已匹配和待匹配需求数量的Map
      */
     Map<String, Object> getMatchingDemandCount();
+    
+    /**
+     * 检查并更新需求状态
+     * 根据已分配资源总量检查需求状态，如果累计分配已满足需求则更新为allocated
+     * @param demandId 需求ID
+     * @return 更新后的状态信息
+     */
+    Map<String, Object> checkAndUpdateDemandStatus(Long demandId);
 }

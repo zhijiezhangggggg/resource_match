@@ -215,6 +215,9 @@ public class SchedulingServiceImpl implements SchedulingService {
         Resource bestResource = null;
         double bestSimilarity = 0.0;
         
+        // 获取需求类型，用于类型匹配校验
+        String demandType = demand.getDemandType();
+        
         for (Resource resource : resources) {
             // 已经被其它需求占用的资源不再重复使用
             if (usedResources.contains(resource.getId())) {
@@ -224,6 +227,15 @@ public class SchedulingServiceImpl implements SchedulingService {
             // 可用数量为空或<=0 的资源视为不可用，跳过
             if (resource.getAvailableQuantity() == null || resource.getAvailableQuantity() <= 0) {
                 continue;
+            }
+            
+            // 强制类型匹配：资源类型必须与需求类型完全一致
+            if (demandType != null && !demandType.trim().isEmpty()) {
+                String resourceType = resource.getResourceType();
+                if (resourceType == null || !resourceType.equals(demandType)) {
+                    // 类型不匹配，跳过该资源
+                    continue;
+                }
             }
             
             double similarity = similarityCalculationService.calculateOverallSimilarity(resource, demand);
